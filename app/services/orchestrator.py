@@ -100,10 +100,20 @@ class Orchestrator:
             return
 
         yield progress_event("research_seed_gene", "completed")
+
+        yield progress_event("research_neighbors", "running")
+        # Eager-fetch fast MyGene basic facts for immediate neighbors
+        neighbor_symbols = [r.gene for r in facts.neighbors]
+        neighbor_facts_list = await asyncio.gather(
+            *(self._research.get_basic_facts(sym, species) for sym in neighbor_symbols)
+        )
+        neighbor_facts = {f.gene: f for f in neighbor_facts_list}
+        yield progress_event("research_neighbors", "completed")
+
         yield progress_event("build_graph", "running")
 
         # ── Build provisional graph and stream it immediately ─────────────────
-        snapshot = self._graph.build_seed_graph(session_id, facts)
+        snapshot = self._graph.build_seed_graph(session_id, facts, neighbor_facts)
 
         node_dicts = [n.model_dump(mode='json') for n in snapshot.nodes]
         edge_dicts = [e.model_dump(mode='json') for e in snapshot.edges]
@@ -162,6 +172,7 @@ class Orchestrator:
         request_id: str,
         session_id: str,
         gene_id: str,
+        prompt: str | None = None,
     ) -> AsyncGenerator[SSEEvent, None]:
         gene = gene_id.replace("gene_", "").upper()
 
@@ -188,9 +199,18 @@ class Orchestrator:
             return
         yield progress_event("research_gene_deep", "completed")
 
+        yield progress_event("research_neighbors", "running")
+        # Eager-fetch basic facts for new neighbors
+        neighbor_symbols = [r.gene for r in facts.neighbors]
+        neighbor_facts_list = await asyncio.gather(
+            *(self._research.get_basic_facts(sym, "human") for sym in neighbor_symbols)
+        )
+        neighbor_facts = {f.gene: f for f in neighbor_facts_list}
+        yield progress_event("research_neighbors", "completed")
+
         # ── Compute patch and stream ──────────────────────────────────────────
         yield progress_event("compute_graph_patch", "running")
-        patch = self._graph.compute_patch(current, facts)
+        patch = self._graph.compute_patch(current, facts, neighbor_facts)
         updated = self._graph.apply_patch(current, patch)
         yield progress_event("compute_graph_patch", "completed")
 
@@ -213,6 +233,7 @@ class Orchestrator:
                 gene=gene,
                 facts={"summary": facts.summary, "pathways": facts.pathways},
                 graph_context=neighbours_ctx,
+                prompt=prompt,
             )
             detail_text = summary_result.get("summary", facts.summary or "")
         except GeneAgentError:

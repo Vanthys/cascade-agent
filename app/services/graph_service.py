@@ -77,6 +77,7 @@ class GraphService:
         self,
         session_id: str,
         facts: GeneFacts,
+        neighbor_facts: dict[str, GeneFacts] | None = None,
     ) -> GraphSnapshot:
         """Build an initial graph from seed gene facts + its neighbors."""
         seed_symbol = facts.gene.upper()
@@ -87,7 +88,8 @@ class GraphService:
 
         for relation in facts.neighbors:
             neighbor_symbol = relation.gene.upper()
-            neighbor_node = _make_node(neighbor_symbol)
+            neighbor_fact = (neighbor_facts or {}).get(neighbor_symbol)
+            neighbor_node = _make_node(neighbor_symbol, neighbor_fact)
             nodes[neighbor_node.id] = neighbor_node
 
             edge = _make_edge(seed_symbol, neighbor_symbol, relation)
@@ -107,6 +109,7 @@ class GraphService:
         self,
         current: GraphSnapshot,
         new_facts: GeneFacts,
+        neighbor_facts: dict[str, GeneFacts] | None = None,
     ) -> GraphPatch:
         """
         Return a patch containing only new nodes and edges not already in the snapshot.
@@ -131,7 +134,8 @@ class GraphService:
 
         for relation in new_facts.neighbors:
             neighbor_symbol = relation.gene.upper()
-            neighbor_node = _make_node(neighbor_symbol)
+            neighbor_fact = (neighbor_facts or {}).get(neighbor_symbol)
+            neighbor_node = _make_node(neighbor_symbol, neighbor_fact)
             if neighbor_node.id not in existing_node_ids:
                 new_nodes.append(neighbor_node)
                 existing_node_ids.add(neighbor_node.id)

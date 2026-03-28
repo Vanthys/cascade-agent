@@ -170,7 +170,7 @@ class StringDbProvider:
                 params={
                     "identifiers": symbol,
                     "species": taxid,
-                    "limit": 20,
+                    "limit": 8,
                     "caller_identity": "gene_agent_hackathon",
                 },
                 timeout=15.0,
@@ -261,6 +261,10 @@ class ResearchAggregator:
         )
         facts.neighbors = neighbors
         return facts
+
+    async def get_basic_facts(self, symbol: str, species: str = "human") -> GeneFacts:
+        """Fetch only MyGene facts (no neighbor traversal)."""
+        return await self._mygene.get_gene(symbol, species)
 
     async def get_neighbors(self, symbol: str, species: str = "human") -> list[GeneRelation]:
         return await self._string.get_neighbors(symbol, species)

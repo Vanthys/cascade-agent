@@ -72,7 +72,7 @@ async def expand_gene(
     async def run():
         try:
             async for event in orch.expand_gene_workflow(
-                request_id, body.session_id, body.gene_id
+                request_id, body.session_id, body.gene_id, body.prompt
             ):
                 await queue.put(event)
         except Exception as exc:

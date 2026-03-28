@@ -35,8 +35,8 @@ export async function seedGraph(sessionId, prompt, species = 'human') {
 }
 
 /** Expand a gene node deeper. Returns { request_id, stream_url }. */
-export async function expandGene(sessionId, geneId) {
-  return post('/graph/gene/expand', { session_id: sessionId, gene_id: geneId });
+export async function expandGene(sessionId, geneId, prompt = null) {
+  return post('/graph/gene/expand', { session_id: sessionId, gene_id: geneId, prompt });
 }
 
 /** Explain an edge. Returns { request_id, stream_url }. */

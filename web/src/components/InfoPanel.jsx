@@ -134,6 +134,7 @@ export default function InfoPanel({
   sessionId,
   onNewSearch,
   onGraphPatch,
+  onNodeExpanded,
 }) {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [conversation, setConversation] = useState([]);
@@ -240,22 +241,32 @@ export default function InfoPanel({
     setConversation((prev) => [...prev, { role: "user", text: prompt }]);
 
     const isNode = selection._type === "node";
-    const perturbation = detectPerturbation(prompt);
+    const text = prompt.trim();
 
     try {
       let request_id;
 
-      if (isNode && perturbation) {
-        // What-if hypothesis
-        ({ request_id } = await runWhatIf(
-          sessionId,
-          selection.id,
-          "node",
-          perturbation
-        ));
-      } else if (isNode) {
-        // Expand gene for more detail
-        ({ request_id } = await expandGene(sessionId, selection.id));
+      if (isNode) {
+        if (text.startsWith("/whatif")) {
+          // Explicit what-if command
+          const pertStr = text.replace("/whatif", "").trim();
+          const perturbation = detectPerturbation(pertStr) || "knockout";
+          ({ request_id } = await runWhatIf(sessionId, selection.id, "node", perturbation));
+        } else if (text.startsWith("/expand")) {
+          // Explicit expand command
+          onNodeExpanded?.(selection.id);
+          const query = text.replace("/expand", "").trim();
+          ({ request_id } = await expandGene(sessionId, selection.id, query));
+        } else {
+          // Fallback: sniff for perturbation keywords, default to expand
+          const perturbation = detectPerturbation(text);
+          if (perturbation) {
+            ({ request_id } = await runWhatIf(sessionId, selection.id, "node", perturbation));
+          } else {
+            onNodeExpanded?.(selection.id);
+            ({ request_id } = await expandGene(sessionId, selection.id, text));
+          }
+        }
       } else {
         // Edge follow-up → re-explain
         ({ request_id } = await explainEdge(sessionId, selection.id));

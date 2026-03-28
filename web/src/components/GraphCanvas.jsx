@@ -27,7 +27,7 @@ const LEGEND_ITEMS = [
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function GraphCanvas({ graphData, seedId, onSelectNode, onSelectEdge }) {
+export default function GraphCanvas({ graphData, expandedNodes, selectedNodeId, seedId, onSelectNode, onSelectEdge }) {
   const wrapRef = useRef(null);
   const svgRef  = useRef(null);
   const simRef  = useRef(null);
@@ -79,15 +79,16 @@ export default function GraphCanvas({ graphData, seedId, onSelectNode, onSelectE
 
     // ── Force simulation ────────────────────────────────────────────────────
     const sim = d3.forceSimulation(nodes)
+      .velocityDecay(0.6) // dampen the jumpy physics
       .force("link",
         d3.forceLink(edges)
           .id((d) => d.id)
-          .distance(180)
-          .strength(0.5)
+          .distance(100)
+          .strength(1.0)
       )
-      .force("charge", d3.forceManyBody().strength(-650))
+      .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide().radius((d) => nodeR(d) + 36));
+      .force("collide", d3.forceCollide().radius((d) => nodeR(d) + 16));
     simRef.current = sim;
 
     // ── Edges ───────────────────────────────────────────────────────────────
@@ -151,8 +152,8 @@ export default function GraphCanvas({ graphData, seedId, onSelectNode, onSelectE
     // Circle
     node.append("circle")
       .attr("r", (d) => nodeR(d))
-      .attr("fill", (d) => (d.id === seedId ? "#1677ff" : "#ffffff"))
-      .attr("stroke", (d) => (d.id === seedId ? "#0958d9" : "#e0e0e0"))
+      .attr("fill", (d) => expandedNodes?.has(d.id) ? "#1677ff" : "#ffffff")
+      .attr("stroke", (d) => expandedNodes?.has(d.id) ? "#0958d9" : "#e0e0e0")
       .attr("stroke-width", 1.5)
       .style("filter", "drop-shadow(0 1px 4px rgba(0,0,0,0.08))");
 
@@ -161,8 +162,8 @@ export default function GraphCanvas({ graphData, seedId, onSelectNode, onSelectE
       .text((d) => d.label)
       .attr("text-anchor", "middle")
       .attr("dy", "0.35em")
-      .attr("fill", (d) => (d.id === seedId ? "#ffffff" : "#262626"))
-      .attr("font-size", (d) => (d.id === seedId ? 13 : 11))
+      .attr("fill", (d) => expandedNodes?.has(d.id) ? "#ffffff" : "#262626")
+      .attr("font-size", (d) => expandedNodes?.has(d.id) ? 13 : 11)
       .attr("font-weight", 600)
       .style("pointer-events", "none")
       .style("user-select", "none");
@@ -193,7 +194,16 @@ export default function GraphCanvas({ graphData, seedId, onSelectNode, onSelectE
     });
 
     return () => sim.stop();
-  }, [graphData, seedId, onSelectNode, onSelectEdge]);
+  }, [graphData, expandedNodes, seedId, onSelectNode, onSelectEdge]);
+
+  // Update selection styling without restarting physics
+  useEffect(() => {
+    if (!svgRef.current) return;
+    d3.select(svgRef.current)
+      .selectAll(".nodes circle")
+      .attr("stroke", (d) => d.id === selectedNodeId ? "#fa8c16" : (expandedNodes?.has(d.id) ? "#0958d9" : "#e0e0e0"))
+      .attr("stroke-width", (d) => d.id === selectedNodeId ? 3 : 1.5);
+  }, [selectedNodeId, expandedNodes]);
 
   return (
     <div ref={wrapRef} style={{ width: "100%", height: "100%", position: "relative", background: "#fafafa" }}>

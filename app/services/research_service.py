@@ -31,6 +31,12 @@ class ResearchService:
         cache.set_gene(symbol, species, facts)
         return facts
 
+    async def get_basic_facts(self, symbol: str, species: str = "human") -> GeneFacts:
+        """Fetch only MyGene facts (no neighbor traversal) and don't overwrite full cache."""
+        log.info("research_basic_facts_fetch", symbol=symbol, species=species)
+        return await self._aggregator.get_basic_facts(symbol, species)
+
+
     async def get_neighbors(
         self, symbol: str, species: str = "human"
     ) -> list[GeneRelation]:

@@ -21,3 +21,45 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+
+.panel-markdown {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #262626;
+}
+.panel-markdown p {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+.panel-markdown p:last-child {
+  margin-bottom: 0;
+}
+.panel-markdown ul, .panel-markdown ol {
+  padding-left: 20px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+.panel-markdown li {
+  margin-bottom: 4px;
+}
+.panel-markdown h1, .panel-markdown h2, .panel-markdown h3, .panel-markdown h4 {
+  margin-top: 12px;
+  margin-bottom: 8px;
+  color: #141414;
+}
+.panel-markdown strong {
+  font-weight: 600;
+  color: #141414;
+}
+.panel-markdown a {
+  color: #1677ff;
+  text-decoration: none;
+}
+.panel-markdown code {
+  background: rgba(0,0,0,0.04);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+}
+

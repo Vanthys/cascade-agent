@@ -147,23 +147,28 @@ class GMIClient:
         gene: str,
         facts: dict[str, Any],
         graph_context: dict[str, Any],
+        prompt: str | None = None,
     ) -> dict[str, Any]:
         """Generate a concise graph summary for the seed gene."""
-        prompt = f"""
+        user_question = f"\nUser question: {prompt}" if prompt else ""
+        system_prompt = f"""
 Task: summary_generation
 
 Gene: {gene}
 Facts: {json.dumps(facts, indent=2)}
-Graph context (neighbors): {json.dumps(graph_context, indent=2)}
+Graph context (neighbors): {json.dumps(graph_context, indent=2)}{user_question}
+
+Provide a concise biological summary of the gene. If the user asked a question, answer it directly.
+Evaluate the provided graph context (neighbors) and suggest the most promising genes to explore next.
 
 Return JSON with this exact schema:
 {{
-  "summary": "2–3 sentence concise biological summary",
+  "summary": "2–3 sentence concise biological summary, answering the user question if provided, and highlighting the most important connected neighbors.",
   "key_roles": ["role1", "role2"],
   "suggested_next": ["gene_or_pathway to explore next"]
 }}
 """
-        return await self.complete_json(prompt, model=settings.gmi_fast_model)
+        return await self.complete_json(system_prompt, model=settings.gmi_fast_model)
 
     async def explain_edge(
         self,

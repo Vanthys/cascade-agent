@@ -31,6 +31,7 @@ export default function App() {
   const [selection, setSelection] = useState(null);
   const [progressStep, setProgressStep] = useState(0);
   const [progressText, setProgressText] = useState("");
+  const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [error, setError] = useState(null);
 
   const stopStreamRef = useRef(null);
@@ -107,6 +108,8 @@ export default function App() {
           // Auto-select the seed node
           const seedNode = accNodes[seedNodeId] ?? Object.values(accNodes)[0];
           if (seedNode) setSelection({ _type: "node", ...seedNode });
+          
+          setExpandedNodes(new Set([seedNodeId]));
         },
 
         error({ message, recoverable }) {
@@ -141,12 +144,17 @@ export default function App() {
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
+  const handleNodeExpanded = (nodeId) => {
+    setExpandedNodes((prev) => new Set(prev).add(nodeId));
+  };
+
   const handleNewSearch = () => {
     stopStreamRef.current?.();
     setPhase("chat");
     setSeedGene(null);
     setGraphData({ nodes: [], edges: [] });
     setSelection(null);
+    setExpandedNodes(new Set());
     setError(null);
   };
 
@@ -227,6 +235,8 @@ export default function App() {
             <GraphCanvas
               graphData={graphData}
               seedId={seedId}
+              expandedNodes={expandedNodes}
+              selectedNodeId={selection?._type === "node" ? selection.id : null}
               onSelectNode={handleSelectNode}
               onSelectEdge={handleSelectEdge}
             />
@@ -250,6 +260,7 @@ export default function App() {
             sessionId={sessionId}
             onNewSearch={handleNewSearch}
             onGraphPatch={handleGraphPatch}
+            onNodeExpanded={handleNodeExpanded}
           />
         </Sider>
       </Layout>

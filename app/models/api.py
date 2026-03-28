@@ -53,6 +53,7 @@ class SeedGraphRequest(BaseModel):
 class ExpandGeneRequest(BaseModel):
     session_id: str
     gene_id: str = Field(..., description="Node ID like 'gene_TP53'")
+    prompt: str | None = Field(None, description="Optional user question")
 
 
 class ExplainEdgeRequest(BaseModel):
