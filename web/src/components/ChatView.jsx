@@ -123,7 +123,7 @@ export default function ChatView({ onSubmit, loading, error }) {
       {error && (
         <Alert
           type="error"
-          message={error}
+          title={error}
           showIcon
           style={{ marginTop: 16, maxWidth: 560, width: "100%", fontSize: 12 }}
         />
