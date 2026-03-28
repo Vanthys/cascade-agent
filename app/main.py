@@ -51,6 +51,7 @@ async def lifespan(app: FastAPI):
     graph_svc = GraphService()
     gmi = GMIClient(http_client)
     hydra = HydraClient()
+    await hydra.ensure_tenant()   # idempotent — no-op if key not set
     memory_svc = MemoryService(hydra)
     hypothesis_svc = HypothesisService(gmi)
     orchestrator = Orchestrator(research, graph_svc, hypothesis_svc, memory_svc, gmi)

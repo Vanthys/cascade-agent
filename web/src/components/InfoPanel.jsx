@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { Typography, Tag, Divider, Button, Spin, Tooltip } from "antd";
+import { Typography, Tag, Divider, Button, Spin, Tooltip, Alert } from "antd";
 import {
   NodeIndexOutlined,
   ApartmentOutlined,
   ReloadOutlined,
-  LinkOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import PromptInput from "./PromptInput";
 import { simulateSSEStream } from "../data/mockData";
+import {
+  expandGene,
+  explainEdge,
+  runWhatIf,
+  connectStream,
+  detectPerturbation,
+} from "../api/client";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -21,7 +28,7 @@ const RELATION_COLORS = {
   unknown_related: "default",
 };
 
-// ─── Node detail view ─────────────────────────────────────────────────────────
+// ─── Node detail header ────────────────────────────────────────────────────────
 function NodeDetail({ node }) {
   return (
     <>
@@ -71,7 +78,7 @@ function NodeDetail({ node }) {
   );
 }
 
-// ─── Edge detail view ─────────────────────────────────────────────────────────
+// ─── Edge detail header ────────────────────────────────────────────────────────
 function EdgeDetail({ edge, graphData }) {
   const sourceNode = graphData?.nodes.find((n) => n.id === edge.source);
   const targetNode = graphData?.nodes.find((n) => n.id === edge.target);
@@ -120,23 +127,32 @@ function EdgeDetail({ edge, graphData }) {
 }
 
 // ─── Main panel ───────────────────────────────────────────────────────────────
-export default function InfoPanel({ selection, graphData, onNewSearch, streamingText }) {
+export default function InfoPanel({
+  selection,
+  graphData,
+  sessionId,
+  onNewSearch,
+  onGraphPatch,
+}) {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [conversation, setConversation] = useState([]);
   const [displayedText, setDisplayedText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamError, setStreamError] = useState(null);
   const scrollRef = useRef(null);
   const stopStreamRef = useRef(null);
 
-  // When selection changes, reset conversation
+  // Reset state when selection changes
   useEffect(() => {
     setConversation([]);
     setDisplayedText("");
     setIsStreaming(false);
-    if (stopStreamRef.current) stopStreamRef.current();
+    setStreamError(null);
+    stopStreamRef.current?.();
+    stopStreamRef.current = null;
   }, [selection?.id]);
 
-  // Stream the main summary text for nodes
+  // ── Node: typewriter summary from meta ─────────────────────────────────────
   useEffect(() => {
     if (!selection || selection._type !== "node") return;
     const text = selection.meta?.summary;
@@ -144,37 +160,69 @@ export default function InfoPanel({ selection, graphData, onNewSearch, streaming
 
     setDisplayedText("");
     setIsStreaming(true);
-    if (stopStreamRef.current) stopStreamRef.current();
+    stopStreamRef.current?.();
 
     const stop = simulateSSEStream(
       text,
       (chunk) => setDisplayedText((prev) => prev + chunk),
       () => setIsStreaming(false),
-      30
+      25
     );
     stopStreamRef.current = stop;
     return stop;
   }, [selection?.id]);
 
-  // Stream edge summary
+  // ── Edge: call real explain endpoint, stream result ────────────────────────
   useEffect(() => {
-    if (!selection || selection._type !== "edge") return;
-    const text = selection.evidence_summary;
-    if (!text) return;
+    if (!selection || selection._type !== "edge" || !sessionId) return;
 
     setDisplayedText("");
     setIsStreaming(true);
-    if (stopStreamRef.current) stopStreamRef.current();
+    setStreamError(null);
+    stopStreamRef.current?.();
 
-    const stop = simulateSSEStream(
-      text,
-      (chunk) => setDisplayedText((prev) => prev + chunk),
-      () => setIsStreaming(false),
-      30
-    );
-    stopStreamRef.current = stop;
-    return stop;
-  }, [selection?.id]);
+    let buffer = "";
+
+    explainEdge(sessionId, selection.id)
+      .then(({ request_id }) => {
+        const stop = connectStream(request_id, {
+          summary_chunk({ text }) {
+            buffer += text;
+            const current = buffer;
+            // typewriter: re-stream accumulated text from scratch each time
+            // (simpler: just append chunks directly)
+            setDisplayedText(current);
+          },
+          completed() {
+            setIsStreaming(false);
+          },
+          error({ message }) {
+            setStreamError(message);
+            setIsStreaming(false);
+          },
+          onClose() {
+            setIsStreaming(false);
+          },
+        });
+        stopStreamRef.current = stop;
+      })
+      .catch((err) => {
+        // Fallback: show static evidence_summary if API fails
+        const fallback = selection.evidence_summary || "";
+        if (fallback) {
+          const stop = simulateSSEStream(
+            fallback,
+            (chunk) => setDisplayedText((prev) => prev + chunk),
+            () => setIsStreaming(false),
+            25
+          );
+          stopStreamRef.current = stop;
+        } else {
+          setStreamError("Could not fetch edge explanation.");
+          setIsStreaming(false);
+        }
+      });
+  }, [selection?.id, sessionId]);
 
   // Scroll conversation to bottom
   useEffect(() => {
@@ -183,36 +231,97 @@ export default function InfoPanel({ selection, graphData, onNewSearch, streaming
     }
   }, [conversation, displayedText]);
 
-  const handleFollowUp = (prompt) => {
+  // ── Follow-up prompt handler ───────────────────────────────────────────────
+  const handleFollowUp = async (prompt) => {
+    if (!sessionId || !selection) return;
+
     setFollowUpLoading(true);
     setConversation((prev) => [...prev, { role: "user", text: prompt }]);
 
-    // Mock response
-    setTimeout(() => {
-      const mockReply = `This is a mock response to: "${prompt}". In the real application this will be answered by the AI agent using session context and the current graph state.`;
+    const isNode = selection._type === "node";
+    const perturbation = detectPerturbation(prompt);
+
+    try {
+      let request_id;
+
+      if (isNode && perturbation) {
+        // What-if hypothesis
+        ({ request_id } = await runWhatIf(
+          sessionId,
+          selection.id,
+          "node",
+          perturbation
+        ));
+      } else if (isNode) {
+        // Expand gene for more detail
+        ({ request_id } = await expandGene(sessionId, selection.id));
+      } else {
+        // Edge follow-up → re-explain
+        ({ request_id } = await explainEdge(sessionId, selection.id));
+      }
+
       let partial = "";
-      const stop = simulateSSEStream(
-        mockReply,
-        (chunk) => {
-          partial += chunk;
+
+      const stop = connectStream(request_id, {
+        graph_patch(patch) {
+          // Expand-gene may return new nodes; propagate upward
+          onGraphPatch?.(patch);
+        },
+        summary_chunk({ text }) {
+          partial += text;
+          const snap = partial;
           setConversation((prev) => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
             if (last?.role === "assistant") {
-              updated[updated.length - 1] = { role: "assistant", text: partial };
+              updated[updated.length - 1] = { role: "assistant", text: snap };
             } else {
-              updated.push({ role: "assistant", text: partial });
+              updated.push({ role: "assistant", text: snap });
             }
             return updated;
           });
         },
-        () => setFollowUpLoading(false),
-        35
-      );
+        completed(data) {
+          // If what-if, surface downstream candidates
+          if (data.downstream_candidates?.length) {
+            const note = `Downstream candidates: ${data.downstream_candidates.join(", ")}`;
+            setConversation((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last?.role === "assistant") {
+                updated[updated.length - 1] = {
+                  role: "assistant",
+                  text: last.text + `\n\n${note}`,
+                };
+              }
+              return updated;
+            });
+          }
+          setFollowUpLoading(false);
+          stop?.();
+        },
+        error({ message }) {
+          setConversation((prev) => [
+            ...prev,
+            { role: "assistant", text: `Error: ${message}` },
+          ]);
+          setFollowUpLoading(false);
+        },
+        onClose() {
+          setFollowUpLoading(false);
+        },
+      });
       stopStreamRef.current = stop;
-    }, 400);
+    } catch (err) {
+      setConversation((prev) => [
+        ...prev,
+        { role: "assistant", text: `Failed to call backend: ${err.message}` },
+      ]);
+      setFollowUpLoading(false);
+    }
   };
 
+  // ── Empty state ────────────────────────────────────────────────────────────
   if (!selection) {
     return (
       <div
@@ -241,14 +350,7 @@ export default function InfoPanel({ selection, graphData, onNewSearch, streaming
   const isNode = selection._type === "node";
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Header */}
       <div
         style={{
@@ -280,23 +382,18 @@ export default function InfoPanel({ selection, graphData, onNewSearch, streaming
       <Divider style={{ margin: "8px 0" }} />
 
       {/* Scrollable content */}
-      <div
-        ref={scrollRef}
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "0 16px 8px",
-        }}
-      >
-        {/* Main streamed summary */}
-        <Paragraph
-          style={{
-            fontSize: 13,
-            lineHeight: 1.75,
-            color: "#262626",
-            marginBottom: 0,
-          }}
-        >
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px 8px" }}>
+        {streamError && (
+          <Alert
+            type="warning"
+            message={streamError}
+            showIcon
+            style={{ marginBottom: 12, fontSize: 12 }}
+          />
+        )}
+
+        {/* Main streamed summary / explanation */}
+        <Paragraph style={{ fontSize: 13, lineHeight: 1.75, color: "#262626", marginBottom: 0 }}>
           {displayedText}
           {isStreaming && (
             <span
@@ -312,6 +409,13 @@ export default function InfoPanel({ selection, graphData, onNewSearch, streaming
             />
           )}
         </Paragraph>
+
+        {/* What-if hint for nodes */}
+        {isNode && !isStreaming && displayedText && conversation.length === 0 && (
+          <Text type="secondary" style={{ fontSize: 11, display: "block", marginTop: 8 }}>
+            <ThunderboltOutlined /> Try: "What if {selection.label} is downregulated?"
+          </Text>
+        )}
 
         {/* Follow-up conversation */}
         {conversation.length > 0 && (
@@ -331,27 +435,31 @@ export default function InfoPanel({ selection, graphData, onNewSearch, streaming
                   style={{
                     maxWidth: "85%",
                     padding: "8px 12px",
-                    borderRadius: msg.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                    borderRadius:
+                      msg.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
                     background: msg.role === "user" ? "#1677ff" : "#f5f5f5",
                     color: msg.role === "user" ? "#fff" : "#262626",
                     fontSize: 12,
                     lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
                   }}
                 >
                   {msg.text}
-                  {i === conversation.length - 1 && msg.role === "assistant" && followUpLoading && (
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: 2,
-                        height: "1em",
-                        background: "#1677ff",
-                        marginLeft: 2,
-                        verticalAlign: "text-bottom",
-                        animation: "blink 0.8s step-end infinite",
-                      }}
-                    />
-                  )}
+                  {i === conversation.length - 1 &&
+                    msg.role === "assistant" &&
+                    followUpLoading && (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 2,
+                          height: "1em",
+                          background: "#1677ff",
+                          marginLeft: 2,
+                          verticalAlign: "text-bottom",
+                          animation: "blink 0.8s step-end infinite",
+                        }}
+                      />
+                    )}
                 </div>
               </div>
             ))}
@@ -373,7 +481,7 @@ export default function InfoPanel({ selection, graphData, onNewSearch, streaming
           loading={followUpLoading}
           placeholder={
             isNode
-              ? `Ask about ${selection.label}…`
+              ? `Ask about ${selection.label} or try a what-if…`
               : "Ask about this interaction…"
           }
         />

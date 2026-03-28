@@ -4,7 +4,7 @@ import { ExperimentOutlined, ReloadOutlined } from "@ant-design/icons";
 import ChatView from "./components/ChatView";
 import GraphCanvas from "./components/GraphCanvas";
 import InfoPanel from "./components/InfoPanel";
-import { MOCK_GRAPH, simulateSSEStream } from "./data/mockData";
+import { createSession, seedGraph, connectStream } from "./api/client";
 import "./App.css";
 
 const { Header, Content, Sider } = Layout;
@@ -12,64 +12,151 @@ const { Text } = Typography;
 
 const PANEL_WIDTH = 360;
 
-const PROGRESS_STEPS = [
-  "Normalising gene symbol…",
-  "Retrieving gene function from literature…",
-  "Finding adjacent interactors…",
-  "Building interaction graph…",
-  "Generating summary…",
-];
+// Maps backend SSE step names → user-friendly labels
+const STEP_LABELS = {
+  normalise_prompt:   "Normalising gene symbol…",
+  retrieve_context:   "Retrieving session context…",
+  research_seed_gene: "Fetching gene data from literature…",
+  find_adjacent_genes:"Finding adjacent interactors…",
+  build_graph:        "Building interaction graph…",
+  generate_summary:   "Generating summary…",
+};
+const TOTAL_STEPS = Object.keys(STEP_LABELS).length;
 
 export default function App() {
   const [phase, setPhase] = useState("chat"); // "chat" | "loading" | "graph"
+  const [sessionId, setSessionId] = useState(null);
   const [seedGene, setSeedGene] = useState(null);
-  const [graphData, setGraphData] = useState(null);
+  const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
   const [selection, setSelection] = useState(null);
   const [progressStep, setProgressStep] = useState(0);
   const [progressText, setProgressText] = useState("");
+  const [error, setError] = useState(null);
 
   const stopStreamRef = useRef(null);
 
-  useEffect(() => () => stopStreamRef.current?.(), []);
+  // Create a session on first mount
+  useEffect(() => {
+    createSession()
+      .then((data) => setSessionId(data.session_id))
+      .catch((err) => console.error("Failed to create session:", err));
+    return () => stopStreamRef.current?.();
+  }, []);
 
-  const handleSubmit = (prompt) => {
-    setSeedGene(prompt.toUpperCase());
+  // ── Seed graph workflow ───────────────────────────────────────────────────
+
+  const handleSubmit = async (prompt) => {
+    if (!sessionId) return;
+
+    const gene = prompt.trim().split(/\s+/)[0].toUpperCase();
+    setSeedGene(gene);
     setPhase("loading");
     setSelection(null);
     setProgressStep(0);
-    setProgressText(PROGRESS_STEPS[0]);
+    setProgressText(STEP_LABELS.normalise_prompt);
+    setError(null);
 
-    let step = 0;
-    const interval = setInterval(() => {
-      step += 1;
-      if (step < PROGRESS_STEPS.length) {
-        setProgressStep(step);
-        setProgressText(PROGRESS_STEPS[step]);
-      } else {
-        clearInterval(interval);
-        setGraphData(MOCK_GRAPH);
-        setPhase("graph");
-        // Auto-select seed node
-        const seed = MOCK_GRAPH.nodes[0];
-        setSelection({ _type: "node", ...seed });
-      }
-    }, 700);
+    // Accumulated graph state from patches
+    const accNodes = {};
+    const accEdges = {};
+    let summaryText = "";
+    let stepCount = 0;
+
+    try {
+      const { request_id } = await seedGraph(sessionId, prompt);
+
+      const stop = connectStream(request_id, {
+        progress({ step, status }) {
+          if (status === "running") {
+            stepCount = Math.min(stepCount + 1, TOTAL_STEPS);
+            setProgressStep(stepCount);
+            setProgressText(STEP_LABELS[step] ?? step.replace(/_/g, " ") + "…");
+          }
+        },
+
+        graph_patch({ nodes, edges }) {
+          nodes.forEach((n) => (accNodes[n.id] = n));
+          edges.forEach((e) => (accEdges[e.id] = e));
+          setGraphData({
+            nodes: Object.values(accNodes),
+            edges: Object.values(accEdges),
+          });
+        },
+
+        summary_chunk({ text }) {
+          summaryText = text;
+        },
+
+        completed() {
+          // Attach the LLM summary to the seed node's meta so InfoPanel shows it
+          const seedNodeId = `gene_${gene}`;
+          if (accNodes[seedNodeId] && summaryText) {
+            accNodes[seedNodeId] = {
+              ...accNodes[seedNodeId],
+              meta: { ...accNodes[seedNodeId].meta, summary: summaryText },
+            };
+          }
+
+          const finalGraph = {
+            nodes: Object.values(accNodes),
+            edges: Object.values(accEdges),
+          };
+          setGraphData(finalGraph);
+          setPhase("graph");
+
+          // Auto-select the seed node
+          const seedNode = accNodes[seedNodeId] ?? Object.values(accNodes)[0];
+          if (seedNode) setSelection({ _type: "node", ...seedNode });
+        },
+
+        error({ message, recoverable }) {
+          console.error("Stream error:", message);
+          setError(message);
+          if (!recoverable) setPhase("chat");
+        },
+      });
+
+      stopStreamRef.current = stop;
+    } catch (err) {
+      console.error("Failed to start seed workflow:", err);
+      setError(err.message);
+      setPhase("chat");
+    }
   };
+
+  // ── Graph patch callback (used by InfoPanel when expanding nodes) ──────────
+
+  const handleGraphPatch = ({ nodes = [], edges = [] }) => {
+    setGraphData((prev) => {
+      const nodeMap = Object.fromEntries(prev.nodes.map((n) => [n.id, n]));
+      const edgeMap = Object.fromEntries(prev.edges.map((e) => [e.id, e]));
+      nodes.forEach((n) => (nodeMap[n.id] = n));
+      edges.forEach((e) => (edgeMap[e.id] = e));
+      return {
+        nodes: Object.values(nodeMap),
+        edges: Object.values(edgeMap),
+      };
+    });
+  };
+
+  // ── Navigation ────────────────────────────────────────────────────────────
 
   const handleNewSearch = () => {
     stopStreamRef.current?.();
     setPhase("chat");
     setSeedGene(null);
-    setGraphData(null);
+    setGraphData({ nodes: [], edges: [] });
     setSelection(null);
+    setError(null);
   };
 
   const handleSelectNode = (node) => setSelection({ _type: "node", ...node });
   const handleSelectEdge = (edge) => setSelection({ _type: "edge", ...edge });
 
-  const progressPercent = Math.round((progressStep / (PROGRESS_STEPS.length - 1)) * 100);
+  const progressPercent = Math.round((progressStep / TOTAL_STEPS) * 100);
 
-  // ── Loading ─────────────────────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────────
+
   if (phase === "loading") {
     return (
       <div className="loading-screen">
@@ -97,12 +184,20 @@ export default function App() {
     );
   }
 
-  // ── Chat ────────────────────────────────────────────────────────────────────
+  // ── Chat ──────────────────────────────────────────────────────────────────
+
   if (phase === "chat") {
-    return <ChatView onSubmit={handleSubmit} loading={false} />;
+    return (
+      <ChatView
+        onSubmit={handleSubmit}
+        loading={!sessionId}
+        error={error}
+      />
+    );
   }
 
-  // ── Graph ───────────────────────────────────────────────────────────────────
+  // ── Graph ─────────────────────────────────────────────────────────────────
+
   const seedId = graphData?.nodes[0]?.id;
 
   return (
@@ -128,7 +223,7 @@ export default function App() {
 
       <Layout style={{ flex: 1, overflow: "hidden" }}>
         <Content style={{ position: "relative", overflow: "hidden" }}>
-          {graphData && (
+          {graphData?.nodes.length > 0 && (
             <GraphCanvas
               graphData={graphData}
               seedId={seedId}
@@ -152,7 +247,9 @@ export default function App() {
           <InfoPanel
             selection={selection}
             graphData={graphData}
+            sessionId={sessionId}
             onNewSearch={handleNewSearch}
+            onGraphPatch={handleGraphPatch}
           />
         </Sider>
       </Layout>

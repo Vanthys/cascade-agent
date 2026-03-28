@@ -14,10 +14,10 @@ class Settings(BaseSettings):
     gmi_fast_model: str = "meta-llama/Llama-3.3-70B-Instruct"
     gmi_strong_model: str = "meta-llama/Llama-3.3-70B-Instruct"
 
-    # HydraDB (stubbed — values read but client is a no-op)
-    hydra_api_key: str = ""
-    hydra_base_url: str = "https://api.hydradb.io"
-    hydra_tenant_id: str = "default"
+    # HydraDB (agent session memory)
+    hydradb_api_key: str = ""         # env: HYDRADB_API_KEY
+    hydra_base_url: str = "https://api.hydradb.com"
+    hydra_tenant_id: str = "gene-agent"
 
     # Database
     database_url: str = "sqlite:///./gene_agent.db"

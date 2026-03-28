@@ -1,7 +1,10 @@
 """
 Memory service — thin wrapper around HydraClient.
-Stores and retrieves agent session memory.
-All methods are safe to call even when HydraDB is stubbed.
+
+Maps orchestrator-level concepts (store interaction, store summary, get context)
+to the HydraDB user-memory model.
+
+All methods are safe to call when HydraDB is in no-op mode (no API key set).
 """
 
 from __future__ import annotations
@@ -18,6 +21,8 @@ class MemoryService:
     def __init__(self, hydra: HydraClient):
         self._hydra = hydra
 
+    # ── Store helpers ──────────────────────────────────────────────────────────
+
     async def store_interaction(
         self,
         session_id: str,
@@ -26,23 +31,24 @@ class MemoryService:
         focus: str | None = None,
         extra: dict[str, Any] | None = None,
     ) -> None:
-        content: dict[str, Any] = {"action": action}
+        """Record what the agent just did so future context recalls know it."""
+        parts = [f"Action: {action}"]
         if gene:
-            content["gene"] = gene
+            parts.append(f"Gene: {gene}")
         if focus:
-            content["focus"] = focus
+            parts.append(f"Focus: {focus}")
         if extra:
-            content.update(extra)
+            for k, v in extra.items():
+                parts.append(f"{k}: {v}")
+        text = " | ".join(parts)
 
-        tags = [f"action:{action}"]
-        if gene:
-            tags.append(f"gene:{gene.upper()}")
+        user_q = f"What was done in session {session_id}?"
+        assistant_a = text
 
-        await self._hydra.store_memory(
+        await self._hydra.store_interaction(
             session_id=session_id,
-            memory_type="interaction",
-            content=content,
-            tags=tags,
+            user_text=user_q,
+            assistant_text=assistant_a,
         )
 
     async def store_summary(
@@ -51,21 +57,20 @@ class MemoryService:
         gene: str,
         summary: str,
     ) -> None:
-        await self._hydra.store_memory(
-            session_id=session_id,
-            memory_type="generated_summary",
-            content={"gene": gene, "summary": summary},
-            tags=[f"gene:{gene.upper()}", "type:summary"],
-        )
+        """Persist an LLM-generated gene summary as unstructured text memory."""
+        text = f"Gene: {gene}\nSummary: {summary}"
+        await self._hydra.store_text(session_id=session_id, text=text)
+
+    # ── Recall ─────────────────────────────────────────────────────────────────
 
     async def get_context(
         self,
         session_id: str,
         query: str,
-        limit: int = 5,
-    ) -> list[dict[str, Any]]:
-        return await self._hydra.retrieve_context(
-            session_id=session_id,
-            query=query,
-            limit=limit,
-        )
+        limit: int = 5,  # kept for interface compat; HydraDB honours max_results internally
+    ) -> str:
+        """
+        Returns a formatted string of recalled memories for injection into
+        LLM prompts.  Returns "" when HydraDB is disabled or nothing matches.
+        """
+        return await self._hydra.get_context(session_id=session_id, query=query)

@@ -105,14 +105,14 @@ class Orchestrator:
         # ── Build provisional graph and stream it immediately ─────────────────
         snapshot = self._graph.build_seed_graph(session_id, facts)
 
-        node_dicts = [n.model_dump() for n in snapshot.nodes]
-        edge_dicts = [e.model_dump() for e in snapshot.edges]
+        node_dicts = [n.model_dump(mode='json') for n in snapshot.nodes]
+        edge_dicts = [e.model_dump(mode='json') for e in snapshot.edges]
         yield graph_patch_event(node_dicts, edge_dicts)
         yield progress_event("build_graph", "completed")
 
         # ── Stream evidence ───────────────────────────────────────────────────
         if facts.sources:
-            ev_dicts = [s.model_dump() for s in facts.sources]
+            ev_dicts = [s.model_dump(mode='json') for s in facts.sources]
             yield evidence_event(ev_dicts)
 
         # ── Generate summary (after graph is already streamed) ────────────────
@@ -196,8 +196,8 @@ class Orchestrator:
 
         if patch.nodes or patch.edges:
             yield graph_patch_event(
-                [n.model_dump() for n in patch.nodes],
-                [e.model_dump() for e in patch.edges],
+                [n.model_dump(mode='json') for n in patch.nodes],
+                [e.model_dump(mode='json') for e in patch.edges],
             )
 
         # ── Summary ───────────────────────────────────────────────────────────
@@ -222,7 +222,7 @@ class Orchestrator:
         yield progress_event("generate_detail_panel", "completed")
 
         if facts.sources:
-            yield evidence_event([s.model_dump() for s in facts.sources])
+            yield evidence_event([s.model_dump(mode='json') for s in facts.sources])
 
         # ── Persist ───────────────────────────────────────────────────────────
         with DBSession(engine) as db:
@@ -292,7 +292,7 @@ class Orchestrator:
 
         yield summary_chunk_event(text)
         if evidence:
-            yield evidence_event([ev.model_dump() for ev in evidence])
+            yield evidence_event([ev.model_dump(mode='json') for ev in evidence])
         yield progress_event("explain_edge", "completed")
 
         await self._memory.store_interaction(
@@ -375,7 +375,7 @@ class Orchestrator:
         yield summary_chunk_event(hypothesis_text)
 
         if analysis.references:
-            yield evidence_event([r.model_dump() for r in analysis.references])
+            yield evidence_event([r.model_dump(mode='json') for r in analysis.references])
 
         # ── Persist ───────────────────────────────────────────────────────────
         await self._memory.store_interaction(

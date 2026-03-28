@@ -42,7 +42,7 @@ class HypothesisService:
         perturbation: PerturbationType,
         graph_context: dict,
         evidence: list[ResearchEvidence],
-        session_memory: list[dict],
+        session_memory: str = "",  # recalled context from HydraDB
     ) -> WhatIfAnalysis:
         # Resolve gene label from target_id (e.g. "gene_TP53" → "TP53")
         gene_label = target_id.replace("gene_", "").upper()

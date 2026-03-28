@@ -1,10 +1,11 @@
+import { Alert } from "antd";
 import { Typography } from "antd";
 import { ExperimentOutlined } from "@ant-design/icons";
 import PromptInput from "./PromptInput";
 
 const { Title, Paragraph, Text } = Typography;
 
-export default function ChatView({ onSubmit, loading }) {
+export default function ChatView({ onSubmit, loading, error }) {
   return (
     <div
       style={{
@@ -83,10 +84,19 @@ export default function ChatView({ onSubmit, loading }) {
         <PromptInput
           onSubmit={onSubmit}
           loading={loading}
-          placeholder="Try: TP53, BRCA1, EGFR, MYC…"
+          placeholder={loading ? "Connecting to backend…" : "Try: TP53, BRCA1, EGFR, MYC…"}
           autoFocus
         />
       </div>
+
+      {error && (
+        <Alert
+          type="error"
+          message={error}
+          showIcon
+          style={{ marginTop: 16, maxWidth: 560, width: "100%", fontSize: 12 }}
+        />
+      )}
 
       <Text style={{ marginTop: 16, fontSize: 12, color: "#8c8c8c" }}>
         For research purposes only. Not intended as clinical guidance.
