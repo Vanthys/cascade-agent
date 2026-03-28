@@ -13,8 +13,14 @@ from pydantic import BaseModel, Field
 from app.models.domain import (
     ConfidenceLevel,
     EdgeType,
+    FullTextAvailability,
     GeneEdge,
     GeneNode,
+    LiteratureCitation,
+    LiteraturePaper,
+    LiteraturePaperDetail,
+    LiteratureSearchResult,
+    LiteratureSource,
     NodeType,
     PerturbationType,
     SessionPreferences,
@@ -90,3 +96,20 @@ class WhatIfRequest(BaseModel):
 class WhatIfResponse(BaseModel):
     request_id: str
     stream_url: str
+
+
+# ── Literature ────────────────────────────────────────────────────────────────
+
+
+class LiteratureSearchRequest(BaseModel):
+    query: str = Field(..., description="Free-text literature query")
+    limit: int = Field(10, ge=1, le=25)
+    include_preprints: bool = True
+    open_access_only: bool = False
+    preprint_days: int = Field(60, ge=1, le=365)
+
+
+class LiteraturePaperRequest(BaseModel):
+    source: LiteratureSource
+    external_id: str = Field(..., description="Provider-specific id like 'PMC:PMC12345'")
+    include_full_text: bool = True

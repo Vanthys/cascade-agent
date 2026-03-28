@@ -18,7 +18,7 @@ export default function PromptInput({ onSubmit, loading, placeholder, autoFocus 
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onPressEnter={handleSubmit}
-        placeholder={placeholder ?? "Try /expand or /whatif, or simply ask…"}
+        placeholder={placeholder ?? "Try /expand, /whatif, or /lit CRISPR resistance"}
         size="large"
         disabled={loading}
         autoFocus={autoFocus}

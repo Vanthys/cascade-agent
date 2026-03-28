@@ -308,6 +308,7 @@ export default function App() {
               onNewSearch={handleNewSearch}
               onGraphPatch={handleGraphPatch}
               onNodeExpanded={handleNodeExpanded}
+              onSelectNode={handleSelectNode}
             />
           ) : (
             <WhatIfPanel

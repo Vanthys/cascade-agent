@@ -55,6 +55,29 @@ export async function runWhatIf(sessionId, targetId, targetType, perturbation, p
   });
 }
 
+// ── Literature ───────────────────────────────────────────────────────────────
+
+export async function searchLiterature(
+  query,
+  { limit = 10, includePreprints = true, openAccessOnly = false, preprintDays = 60 } = {},
+) {
+  return post('/literature/search', {
+    query,
+    limit,
+    include_preprints: includePreprints,
+    open_access_only: openAccessOnly,
+    preprint_days: preprintDays,
+  });
+}
+
+export async function getPaperDetail(source, externalId, includeFullText = true) {
+  return post('/literature/paper', {
+    source,
+    external_id: externalId,
+    include_full_text: includeFullText,
+  });
+}
+
 // ── SSE stream ────────────────────────────────────────────────────────────────
 
 /**

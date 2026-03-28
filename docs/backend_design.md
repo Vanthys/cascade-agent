@@ -194,6 +194,7 @@ Responsibilities:
 fetch structured facts about genes and relationships
 normalize source data into a common schema
 produce evidence packets for graph building and reasoning
+provide a literature-aware toolkit for fresh paper retrieval
 
 For the hackathon, this can begin with:
 
@@ -227,6 +228,44 @@ Output shape:
 Important design choice:
 research should return facts and evidence, not prose.
 Prose belongs to the LLM synthesis layer.
+
+5.3.1 Literature toolkit
+
+Add a dedicated literature retrieval layer alongside gene facts.
+
+Responsibilities:
+
+search Europe PMC for recent, relevant papers
+optionally enrich with bioRxiv recent preprints
+return normalized paper metadata, abstracts, and full text when available
+generate citation-ready fields for chat and summary rendering
+
+Recommended output shape:
+
+{
+  "query": "CRISPR resistance melanoma",
+  "papers": [
+    {
+      "paper_id": "MED:12345678",
+      "source": "europe_pmc",
+      "title": "...",
+      "abstract": "...",
+      "authors": [{"full_name": "Jane Doe"}],
+      "publication_date": "2025-11-02",
+      "doi": "10.1038/...",
+      "is_preprint": false,
+      "full_text_availability": "open_access_xml",
+      "citation": {
+        "short_label": "Doe et al., 2025",
+        "url": "https://europepmc.org/article/MED/12345678"
+      }
+    }
+  ],
+  "citations_for_chat": ["Doe et al., 2025"]
+}
+
+The chat layer should consume `citation.short_label`, `citation.label`, and
+`citation.url` directly instead of trying to format provider-specific metadata.
 
 5.4 Graph Service
 

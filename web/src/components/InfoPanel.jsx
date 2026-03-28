@@ -16,6 +16,7 @@ import {
   connectStream,
   detectPerturbation,
   isWhatIfPrompt,
+  searchLiterature,
 } from "../api/client";
 
 function Text({ children, strong, type, style }) {
@@ -68,6 +69,50 @@ function upsertAssistantMessage(messages, nextMessage) {
     updated.push(nextMessage);
   }
   return updated;
+}
+
+function parseLiteratureCommand(input) {
+  const trimmed = input.trim();
+  const match = trimmed.match(/^\/lit(?:erature)?\s*(.*)$/i);
+  if (!match) return null;
+  return match[1]?.trim() ?? "";
+}
+
+function parseAddCommand(input) {
+  const trimmed = input.trim();
+  const match = trimmed.match(/^\/add\s+(.+)$/i);
+  if (!match) return null;
+  return match[1]?.trim() ?? "";
+}
+
+function buildLiteratureMarkdown(result, query) {
+  const papers = result?.papers ?? [];
+  if (!papers.length) {
+    return `No literature results found for \`${query}\`.`;
+  }
+
+  const lines = [
+    `Found **${papers.length}** paper${papers.length === 1 ? "" : "s"} for \`${query}\`.`,
+    "",
+  ];
+
+  papers.slice(0, 5).forEach((paper, index) => {
+    const meta = [
+      paper.citation?.short_label,
+      paper.journal,
+      paper.is_preprint ? "preprint" : null,
+      paper.full_text_availability !== "none" ? `full text: ${paper.full_text_availability}` : null,
+    ].filter(Boolean).join(" • ");
+
+    lines.push(`${index + 1}. [${paper.title}](${paper.source_url})`);
+    if (meta) lines.push(`   ${meta}`);
+    if (paper.abstract) lines.push(`   ${paper.abstract.slice(0, 280)}${paper.abstract.length > 280 ? "..." : ""}`);
+    if (paper.doi) lines.push(`   DOI: \`${paper.doi}\``);
+    if (paper.external_id) lines.push(`   Paper id: \`${paper.external_id}\``);
+    lines.push("");
+  });
+
+  return lines.join("\n").trim();
 }
 
 function NodeDetail({ node }) {
@@ -353,6 +398,7 @@ export default function InfoPanel({
   onNewSearch,
   onGraphPatch,
   onNodeExpanded,
+  onSelectNode,
 }) {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [conversation, setConversation] = useState([]);
@@ -363,7 +409,6 @@ export default function InfoPanel({
   const stopStreamRef = useRef(null);
   const panelCacheRef = useRef({});
   const lastSelectionIdRef = useRef(null);
-  const lastNodeStreamSelectionRef = useRef(null);
   const lastEdgeStreamSelectionRef = useRef(null);
   const selectionId = selection?.id;
   const selectionType = selection?._type;
@@ -384,8 +429,6 @@ export default function InfoPanel({
 
   useEffect(() => {
     if (!selection || selection._type !== "node") return;
-    if (lastNodeStreamSelectionRef.current === selectionId) return;
-    lastNodeStreamSelectionRef.current = selectionId;
     if (panelCacheRef.current[selectionId]?.displayedText) return;
     const text = selectionSummary;
     if (!text) return;
@@ -477,8 +520,118 @@ export default function InfoPanel({
 
     const isNode = selection._type === "node";
     const text = prompt.trim();
+    const literatureQuery = parseLiteratureCommand(text);
+    const addGeneQuery = parseAddCommand(text);
 
     try {
+      if (addGeneQuery !== null) {
+        const gene = addGeneQuery.split(/\s+/)[0]?.toUpperCase();
+        if (!gene) {
+          setConversation((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              kind: "markdown",
+              text: "Use `/add TP53` to add a gene to the current graph.",
+            },
+          ]);
+          setFollowUpLoading(false);
+          return;
+        }
+
+        onNodeExpanded?.(`gene_${gene}`);
+
+        let partial = "";
+        let addedNode = graphData?.nodes.find((node) => node.id === `gene_${gene}`) ?? null;
+        setDisplayedText("");
+        setIsStreaming(true);
+        setStreamError(null);
+        const { request_id } = await expandGene(sessionId, `gene_${gene}`, "");
+
+        const stop = connectStream(request_id, {
+          graph_patch(patch) {
+            onGraphPatch?.(patch);
+            const patchNode = patch.nodes?.find((node) => node.id === `gene_${gene}`);
+            if (patchNode) {
+              addedNode = patchNode;
+              onSelectNode?.(patchNode);
+            }
+          },
+          summary_chunk({ text: chunk }) {
+            partial += chunk;
+            setDisplayedText(partial);
+            setConversation((prev) =>
+              upsertAssistantMessage(prev, { role: "assistant", kind: "markdown", text: partial })
+            );
+          },
+          completed() {
+            setIsStreaming(false);
+            if (addedNode) {
+              onSelectNode?.({
+                ...addedNode,
+                meta: {
+                  ...addedNode.meta,
+                  summary: partial || addedNode.meta?.summary || "",
+                },
+              });
+            }
+            setFollowUpLoading(false);
+            stop?.();
+          },
+          error({ message }) {
+            setConversation((prev) => [
+              ...prev,
+              { role: "assistant", kind: "markdown", text: `Error: ${message}` },
+            ]);
+            setIsStreaming(false);
+            setFollowUpLoading(false);
+          },
+          onClose() {
+            setIsStreaming(false);
+            setFollowUpLoading(false);
+          },
+        });
+        stopStreamRef.current = stop;
+        return;
+      }
+
+      if (literatureQuery !== null) {
+        const fallbackContext = isNode ? selection.label : [
+          graphData?.nodes.find((node) => node.id === selection.source)?.label,
+          graphData?.nodes.find((node) => node.id === selection.target)?.label,
+        ].filter(Boolean).join(" ");
+        const resolvedQuery = literatureQuery || fallbackContext;
+
+        if (!resolvedQuery) {
+          setConversation((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              kind: "markdown",
+              text: "Use `/lit your query` or select a node first so I have a literature topic.",
+            },
+          ]);
+          setFollowUpLoading(false);
+          return;
+        }
+
+        const result = await searchLiterature(resolvedQuery, {
+          limit: 5,
+          includePreprints: true,
+        });
+
+        setConversation((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            kind: "markdown",
+            text: buildLiteratureMarkdown(result, resolvedQuery),
+          },
+        ]);
+        setFollowUpLoading(false);
+        return;
+      }
+
       let request_id;
 
       if (isNode) {
@@ -608,7 +761,7 @@ export default function InfoPanel({
         {streamError && (
           <Alert
             type="warning"
-            message={streamError}
+            title={streamError}
             showIcon
             style={{ marginBottom: 12, fontSize: 12 }}
           />
@@ -695,8 +848,8 @@ export default function InfoPanel({
           loading={followUpLoading}
           placeholder={
             isNode
-              ? `Ask about ${selection.label} interactions or run a specific what-if.`
-              : "Ask about this interaction."
+              ? `Ask about ${selection.label}, use /add GENE, /whatif, or /lit.`
+              : "Ask about this interaction, or use /add GENE or /lit."
           }
         />
       </div>

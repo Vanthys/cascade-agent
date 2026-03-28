@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import graph, sessions, stream, whatif
+from app.api.routes import graph, literature, sessions, stream, whatif
 from app.clients.gmi_client import GMIClient
 from app.clients.hydra_client import HydraClient
 from app.core.config import settings
@@ -29,6 +29,7 @@ from app.db import init_db
 from app.services.graph_service import GraphService
 from app.services.hypothesis_service import HypothesisService
 from app.services.memory_service import MemoryService
+from app.services.literature_service import LiteratureService
 from app.services.orchestrator import Orchestrator
 from app.services.research_service import ResearchService
 
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI):
 
     # Wire services
     research = ResearchService(http_client)
+    literature_svc = LiteratureService(http_client)
     graph_svc = GraphService()
     gmi = GMIClient(http_client)
     hydra = HydraClient()
@@ -59,6 +61,7 @@ async def lifespan(app: FastAPI):
     # Store on app state so routes can access via request.app.state
     app.state.http_client = http_client
     app.state.orchestrator = orchestrator
+    app.state.literature = literature_svc
 
     log.info("services_ready")
     yield
@@ -95,6 +98,7 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(sessions.router)
     app.include_router(graph.router)
+    app.include_router(literature.router)
     app.include_router(whatif.router)
     app.include_router(stream.router)
 
