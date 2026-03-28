@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cascade — Molecular Intelligence</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+
+  <style>
+    /* ── Base ──────────────────────────────────────────────── */
+    :root {
+      --blue:   #1677ff;
+      --blue2:  #4096ff;
+      --light:  #e6f4ff;
+      --ink:    #111111;
+      --sub:    #595959;
+      --rule:   #e8e8e8;
+      --bg:     #ffffff;
+    }
+
+    .reveal-viewport { background: var(--bg); }
+
+    .reveal {
+      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+      font-size: 36px;
+      color: var(--ink);
+    }
+
+    .reveal h1, .reveal h2, .reveal h3 {
+      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+      text-transform: none;
+      letter-spacing: -0.5px;
+      color: var(--ink);
+      margin: 0 0 0.4em;
+    }
+
+    .reveal h1 { font-size: 2.4em; font-weight: 300; }
+    .reveal h2 { font-size: 1.5em; font-weight: 600; }
+    .reveal h3 { font-size: 1em;   font-weight: 600; color: var(--sub); }
+
+    .reveal p, .reveal li {
+      font-size: 0.72em;
+      line-height: 1.7;
+      color: var(--sub);
+    }
+
+    .reveal ul { list-style: none; padding: 0; margin: 0; }
+    .reveal ul li::before { content: "—"; margin-right: 10px; color: var(--blue); }
+
+    .reveal section { text-align: left; padding: 0 60px; }
+
+    /* ── Slide number ──────────────────────────────────────── */
+    .reveal .slide-number {
+      font-size: 12px;
+      color: #bfbfbf;
+      background: transparent;
+      bottom: 24px;
+      right: 32px;
+    }
+
+    /* ── Rule line under headings ──────────────────────────── */
+    .rule {
+      width: 40px;
+      height: 3px;
+      background: var(--blue);
+      border-radius: 2px;
+      margin: 0 0 28px;
+    }
+
+    /* ── Tags / badges ─────────────────────────────────────── */
+    .tag {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.55em;
+      font-weight: 600;
+      background: var(--light);
+      color: var(--blue);
+      border: 1px solid #91caff;
+      margin: 3px 4px 3px 0;
+    }
+    .tag.sponsor {
+      background: #fff7e6;
+      color: #d46b08;
+      border-color: #ffd591;
+    }
+
+    /* ── Two-column grid ───────────────────────────────────── */
+    .cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      align-items: start;
+    }
+    .cols-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    /* ── Card ──────────────────────────────────────────────── */
+    .card {
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 20px 22px;
+    }
+    .card .card-label {
+      font-size: 0.52em;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 8px;
+    }
+    .card p { margin: 0; font-size: 0.62em; }
+
+    /* ── Sponsor card ──────────────────────────────────────── */
+    .sponsor-card {
+      border: 1.5px solid #ffd591;
+      border-radius: 10px;
+      padding: 20px 22px;
+      background: #fffbf5;
+    }
+    .sponsor-card .sponsor-name {
+      font-size: 0.8em;
+      font-weight: 700;
+      color: #d46b08;
+      margin-bottom: 6px;
+    }
+    .sponsor-card p { margin: 0; font-size: 0.58em; color: #874d00; }
+
+    /* ── Network SVG logo (inline) ─────────────────────────── */
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .wordmark {
+      font-size: 1.6em;
+      font-weight: 300;
+      letter-spacing: -1px;
+      color: var(--ink);
+      line-height: 1;
+    }
+    .tagline {
+      font-size: 0.38em;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--sub);
+      margin-top: 4px;
+    }
+
+    /* ── Title slide centering ─────────────────────────────── */
+    .title-slide {
+      display: flex !important;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      height: 100%;
+      padding: 0 80px !important;
+    }
+
+    /* ── Highlight number ──────────────────────────────────── */
+    .big-num {
+      font-size: 2.8em;
+      font-weight: 300;
+      color: var(--blue);
+      line-height: 1;
+    }
+    .big-num-label {
+      font-size: 0.5em;
+      color: var(--sub);
+      margin-top: 4px;
+    }
+
+    /* ── Step list ─────────────────────────────────────────── */
+    .steps { display: flex; flex-direction: column; gap: 12px; }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      font-size: 0.5em;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 2px;
+    }
+    .step p { margin: 0; font-size: 0.63em; }
+
+    /* ── Progress bar (agent pipeline) ────────────────────── */
+    .pipeline {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 20px 0;
+    }
+    .pipe-node {
+      padding: 10px 16px;
+      background: var(--light);
+      border: 1px solid #91caff;
+      border-radius: 8px;
+      font-size: 0.48em;
+      font-weight: 600;
+      color: var(--blue);
+      white-space: nowrap;
+    }
+    .pipe-arrow {
+      flex: 1;
+      height: 1px;
+      background: #91caff;
+      position: relative;
+    }
+    .pipe-arrow::after {
+      content: "▶";
+      position: absolute;
+      right: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 9px;
+      color: #91caff;
+    }
+
+    /* ── Comparison table ──────────────────────────────────── */
+    table.compare {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.58em;
+    }
+    table.compare th {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--rule);
+      font-size: 0.9em;
+      font-weight: 700;
+      color: var(--sub);
+    }
+    table.compare td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--rule);
+      color: var(--ink);
+      vertical-align: top;
+    }
+    table.compare tr:last-child td { border-bottom: none; }
+    .check  { color: #52c41a; font-weight: 700; }
+    .cross  { color: #ff4d4f; font-weight: 700; }
+    .hl-row td { background: #f0f8ff; font-weight: 600; color: var(--ink); }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 1 — TITLE
+═══════════════════════════════════════════════════════════ -->
+<section class="title-slide">
+  <!-- SVG network icon -->
+  <div class="logo-wrap" style="margin-bottom:36px;">
+    <svg width="72" height="72" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <g stroke="#b8d9f5" stroke-width="1.4" stroke-linecap="round">
+        <line x1="50" y1="50" x2="22" y2="24"/><line x1="50" y1="50" x2="50" y2="14"/>
+        <line x1="50" y1="50" x2="78" y2="24"/><line x1="50" y1="50" x2="86" y2="50"/>
+        <line x1="50" y1="50" x2="78" y2="76"/><line x1="50" y1="50" x2="50" y2="86"/>
+        <line x1="50" y1="50" x2="22" y2="76"/><line x1="50" y1="50" x2="14" y2="50"/>
+        <line x1="22" y1="24" x2="50" y2="14"/><line x1="50" y1="14" x2="78" y2="24"/>
+        <line x1="78" y1="24" x2="86" y2="50"/><line x1="86" y1="50" x2="78" y2="76"/>
+        <line x1="78" y1="76" x2="50" y2="86"/><line x1="50" y1="86" x2="22" y2="76"/>
+        <line x1="22" y1="76" x2="14" y2="50"/><line x1="14" y1="50" x2="22" y2="24"/>
+      </g>
+      <g fill="#c9e4f8">
+        <circle cx="8"  cy="8"  r="4"/><circle cx="62" cy="4"  r="4"/>
+        <circle cx="92" cy="10" r="4"/><circle cx="98" cy="62" r="4"/>
+        <circle cx="88" cy="92" r="4"/><circle cx="38" cy="97" r="4"/>
+        <circle cx="10" cy="90" r="4"/><circle cx="4"  cy="36" r="4"/>
+      </g>
+      <g fill="#4096ff">
+        <circle cx="22" cy="24" r="7.5"/><circle cx="50" cy="14" r="7.5"/>
+        <circle cx="78" cy="24" r="7.5"/><circle cx="86" cy="50" r="7.5"/>
+        <circle cx="78" cy="76" r="7.5"/><circle cx="50" cy="86" r="7.5"/>
+        <circle cx="22" cy="76" r="7.5"/><circle cx="14" cy="50" r="7.5"/>
+      </g>
+      <circle cx="50" cy="50" r="19" fill="#bdd8f5"/>
+      <circle cx="50" cy="50" r="14" fill="#1677ff"/>
+      <circle cx="50" cy="50" r="9"  fill="#0a4fc4"/>
+    </svg>
+    <div>
+      <div class="wordmark">cascade</div>
+      <div class="tagline">Molecular Intelligence</div>
+    </div>
+  </div>
+
+  <h1 style="font-size:1.9em; margin-bottom:12px;">
+    AI-powered protein interaction<br/>explorer &amp; hypothesis engine
+  </h1>
+
+  <p style="font-size:0.62em; max-width:560px; margin:0 0 32px;">
+    Type a gene. Get an interactive interaction network, grounded summaries,
+    and AI-generated what-if hypotheses — in seconds.
+  </p>
+
+  <div>
+    <span class="tag">GMI Cloud</span>
+    <span class="tag">Kimi K2</span>
+    <span class="tag">HydraDB</span>
+    <span class="tag">STRING DB</span>
+    <span class="tag">OmniPath</span>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 2 — THE PROBLEM
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>The Problem</h3>
+  <div class="rule"></div>
+  <h2>Drug discovery is slow because<br/>hypothesis generation is manual</h2>
+
+  <div class="cols" style="margin-top:32px;">
+    <div>
+      <div class="big-num">15+</div>
+      <div class="big-num-label">years from target identification<br/>to approved drug</div>
+
+      <div class="big-num" style="margin-top:28px;">$2.6B</div>
+      <div class="big-num-label">average cost per approved drug<br/>(DiMasi et al.)</div>
+    </div>
+
+    <div>
+      <p style="margin-bottom:16px; color: var(--ink); font-size:0.68em; font-weight:600;">
+        A wet-lab scientist researching a target protein today must:
+      </p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <p>Search PubMed manually across dozens of papers</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <p>Cross-reference interaction databases (STRING, BioGRID, KEGG) separately</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <p>Build a pathway map by hand in Cytoscape or on paper</p>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <p>Reason through perturbation effects with no systematic tool</p>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <p>Wait weeks for colleagues to review hypotheses</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 3 — STATE OF THE ART
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>State of the Art</h3>
+  <div class="rule"></div>
+  <h2>Existing tools solve one piece — not the full workflow</h2>
+
+  <table class="compare" style="margin-top:28px;">
+    <thead>
+      <tr>
+        <th>Tool</th>
+        <th>Literature</th>
+        <th>Live network</th>
+        <th>AI hypotheses</th>
+        <th>Interactive</th>
+        <th>Free</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>STRING DB</strong></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td>limited</td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr>
+        <td><strong>IPA / MetaCore</strong></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td><strong>Cytoscape</strong></td>
+        <td><span class="cross">✗</span></td>
+        <td>import only</td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr>
+        <td><strong>ChatGPT / Claude</strong></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="check">✓</span></td>
+        <td>chat only</td>
+        <td>partial</td>
+      </tr>
+      <tr class="hl-row">
+        <td><strong>Cascade ✦</strong></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 4 — WHAT WE IMPROVE
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Our Contribution</h3>
+  <div class="rule"></div>
+  <h2>One workflow: literature → graph → hypothesis</h2>
+
+  <div class="cols-3" style="margin-top:32px;">
+    <div class="card">
+      <div class="card-label">01 — Real-time graph</div>
+      <p>
+        Type any gene symbol. Within seconds, Cascade fetches curated facts from
+        MyGene.info, maps interactions from STRING DB and OmniPath — including
+        correct <em>activates</em> / <em>inhibits</em> directionality — and renders
+        an interactive force graph.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-label">02 — Grounded summaries</div>
+      <p>
+        Every node and edge comes with an AI-written summary that explicitly
+        separates <strong>known facts</strong> (evidence-backed) from
+        <strong>generated hypotheses</strong>. Clicking any node or edge
+        opens an in-panel conversation with streaming responses.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-label">03 — What-if hypotheses</div>
+      <p>
+        Select a protein, choose a perturbation (inhibit, activate, up/downregulate),
+        and run. The hypothesis agent propagates the effect through the full
+        interaction graph and returns ranked downstream candidates with confidence
+        scores and uncertainty notes.
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 5 — AGENT ARCHITECTURE
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Architecture</h3>
+  <div class="rule"></div>
+  <h2>Four specialised agents — one streaming pipeline</h2>
+
+  <!-- Seed workflow -->
+  <p style="font-size:0.52em; font-weight:700; color:var(--ink); margin: 18px 0 6px;">
+    Seed graph workflow
+  </p>
+  <div class="pipeline">
+    <div class="pipe-node">User prompt</div>
+    <div class="pipe-arrow"></div>
+    <div class="pipe-node">MyGene.info</div>
+    <div class="pipe-arrow"></div>
+    <div class="pipe-node">STRING + OmniPath</div>
+    <div class="pipe-arrow"></div>
+    <div class="pipe-node">Graph patch →&thinsp;SSE</div>
+    <div class="pipe-arrow"></div>
+    <div class="pipe-node">Kimi K2 summary</div>
+  </div>
+
+  <!-- What-if workflow -->
+  <p style="font-size:0.52em; font-weight:700; color:var(--ink); margin: 18px 0 6px;">
+    What-if hypothesis workflow
+  </p>
+  <div class="pipeline">
+    <div class="pipe-node">Target + perturbation</div>
+    <div class="pipe-arrow"></div>
+    <div class="pipe-node">Subgraph extraction</div>
+    <div class="pipe-arrow"></div>
+    <div class="pipe-node">Evidence retrieval</div>
+    <div class="pipe-arrow"></div>
+    <div class="pipe-node">Kimi K2 reasoning</div>
+    <div class="pipe-arrow"></div>
+    <div class="pipe-node">BFS cascade overlay</div>
+  </div>
+
+  <div class="cols" style="margin-top:24px; gap:20px;">
+    <div class="card">
+      <div class="card-label">Session memory</div>
+      <p>Every interaction is stored in <strong>HydraDB</strong> and recalled
+      as context for follow-up questions — the model always knows
+      what you have already explored.</p>
+    </div>
+    <div class="card">
+      <div class="card-label">Streaming-first</div>
+      <p>All four workflows emit Server-Sent Events. The graph appears
+      before the summary finishes generating — no blank loading screens.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 6 — TECH STACK & SPONSORS
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Technology</h3>
+  <div class="rule"></div>
+  <h2>Built on sponsor infrastructure</h2>
+
+  <div class="cols-3" style="margin-top:32px;">
+    <div class="sponsor-card">
+      <div class="sponsor-name">GMI Cloud</div>
+      <p>
+        OpenAI-compatible inference API. Powers all four LLM calls —
+        gene summaries, edge explanations, what-if hypotheses, and
+        conversational follow-ups. Deterministic structured JSON output
+        enforced via strict system prompt.
+      </p>
+    </div>
+
+    <div class="sponsor-card">
+      <div class="sponsor-name">Kimi K2 (Moonshot AI)</div>
+      <p>
+        Our LLM of choice. Long-context window lets us feed the full
+        local subgraph, evidence snippets, and session history into a
+        single prompt. Hosted on GMI Cloud for low-latency inference.
+      </p>
+    </div>
+
+    <div class="sponsor-card">
+      <div class="sponsor-name">HydraDB</div>
+      <p>
+        Persistent agent memory. Each session stores every gene
+        explored, every hypothesis generated, and every conversation
+        exchange. Recalled as semantic context on every new query —
+        enabling true multi-turn research sessions.
+      </p>
+    </div>
+  </div>
+
+  <div class="cols" style="margin-top:24px; gap:20px;">
+    <div class="card">
+      <div class="card-label">Biological data</div>
+      <p>
+        <strong>MyGene.info</strong> — gene facts, aliases, KEGG pathways<br/>
+        <strong>STRING DB</strong> — PPI confidence scores, channel evidence<br/>
+        <strong>OmniPath</strong> — directed, signed activation/inhibition edges
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-label">Frontend</div>
+      <p>
+        <strong>React 19 + Vite</strong> — component-driven UI<br/>
+        <strong>D3.js</strong> — force-simulation graph, perturbation overlays<br/>
+        <strong>FastAPI + SQLite</strong> — streaming backend, session persistence
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 7 — DEMO WALKTHROUGH (title)
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Live Demo</h3>
+  <div class="rule"></div>
+  <h2>How it works — step by step</h2>
+
+  <div class="cols-3" style="margin-top:32px; align-items:center;">
+    <div class="card" style="text-align:center; padding:22px 18px;">
+      <div style="font-size:2em; margin-bottom:8px;">①</div>
+      <div class="card-label" style="margin-bottom:6px;">Type a gene</div>
+      <p>Enter any gene symbol — BCL2, TP53, EGFR, BRCA1. Cascade resolves aliases automatically.</p>
+    </div>
+    <div class="card" style="text-align:center; padding:22px 18px;">
+      <div style="font-size:2em; margin-bottom:8px;">②</div>
+      <div class="card-label" style="margin-bottom:6px;">Graph appears live</div>
+      <p>Interaction network streams in via SSE. Nodes colour-coded by type; edges labelled activates / inhibits / binds.</p>
+    </div>
+    <div class="card" style="text-align:center; padding:22px 18px;">
+      <div style="font-size:2em; margin-bottom:8px;">③</div>
+      <div class="card-label" style="margin-bottom:6px;">Ask &amp; hypothesise</div>
+      <p>Click any node to expand it, ask follow-up questions, or switch to What-if to simulate a perturbation.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 8 — SCREENSHOT: Landing page
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Step 1 — Enter your gene of interest</h3>
+  <div class="rule"></div>
+
+  <div class="cols" style="margin-top:24px; align-items:center; gap:40px;">
+    <div>
+      <h2 style="font-size:1.15em;">Clean, focused input</h2>
+      <ul style="margin-top:16px;">
+        <li>No sign-up, no configuration required</li>
+        <li>Alias resolution — type "BCL-2" and get BCL2</li>
+        <li>Quick-access suggestion buttons for common genes</li>
+        <li>Capability tags hint at what the agent can do</li>
+      </ul>
+    </div>
+    <div style="flex:1; text-align:center;">
+      <img src="screenshots/2.png"
+           alt="Cascade landing page — gene search box"
+           style="max-width:100%; max-height:400px; border-radius:10px;
+                  box-shadow:0 4px 24px rgba(0,0,0,0.12); border:1px solid #e8e8e8;" />
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 9 — SCREENSHOT: Loading / research phase
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Step 2 — AI researches the gene</h3>
+  <div class="rule"></div>
+
+  <div class="cols" style="margin-top:24px; align-items:center; gap:40px;">
+    <div style="flex:1; text-align:center;">
+      <img src="screenshots/3.png"
+           alt="Loading screen — progress bar while researching BCL-2"
+           style="max-width:100%; max-height:400px; border-radius:10px;
+                  box-shadow:0 4px 24px rgba(0,0,0,0.12); border:1px solid #e8e8e8;" />
+    </div>
+    <div>
+      <h2 style="font-size:1.15em;">Six-stage streaming pipeline</h2>
+      <ul style="margin-top:16px;">
+        <li>Symbol normalisation via MyGene.info</li>
+        <li>Gene facts: aliases, KEGG pathways, full summary</li>
+        <li>STRING DB + OmniPath interaction fetch</li>
+        <li>Graph patch events stream to the browser live</li>
+        <li>Kimi K2 summary generated while graph renders</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 10 — SCREENSHOT: Graph + Overview panel
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Step 3 — Explore the interaction graph</h3>
+  <div class="rule"></div>
+
+  <div class="cols" style="margin-top:24px; align-items:center; gap:40px;">
+    <div>
+      <h2 style="font-size:1.15em;">Interactive force graph</h2>
+      <ul style="margin-top:16px;">
+        <li>Red arrows = <strong>inhibits</strong>; green = <strong>activates</strong></li>
+        <li>Blue = binding; purple = coexpression / pathway</li>
+        <li>Right panel shows AI summary + evidence sources</li>
+        <li>Ask follow-up questions directly in the panel</li>
+      </ul>
+    </div>
+    <div style="flex:1; text-align:center;">
+      <img src="screenshots/4.png"
+           alt="Graph view — BCL2 interaction network with Overview panel"
+           style="max-width:100%; max-height:400px; border-radius:10px;
+                  box-shadow:0 4px 24px rgba(0,0,0,0.12); border:1px solid #e8e8e8;" />
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 11 — SCREENSHOT: Follow-up Q&A
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Step 4 — Ask follow-up questions</h3>
+  <div class="rule"></div>
+
+  <div class="cols" style="margin-top:24px; align-items:center; gap:40px;">
+    <div style="flex:1; text-align:center;">
+      <img src="screenshots/5.png"
+           alt="Graph view — panel showing user question and AI hypothesis response"
+           style="max-width:100%; max-height:400px; border-radius:10px;
+                  box-shadow:0 4px 24px rgba(0,0,0,0.12); border:1px solid #e8e8e8;" />
+    </div>
+    <div>
+      <h2 style="font-size:1.15em;">Grounded conversational AI</h2>
+      <ul style="margin-top:16px;">
+        <li>Full session context carried across every message</li>
+        <li>Known facts clearly separated from AI hypotheses</li>
+        <li>Responses stream token-by-token in the panel</li>
+        <li>Evidence citations link back to source databases</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 12 — SCREENSHOT: Node expansion
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Step 5 — Expand nodes on demand</h3>
+  <div class="rule"></div>
+
+  <div class="cols" style="margin-top:24px; align-items:center; gap:40px;">
+    <div>
+      <h2 style="font-size:1.15em;">On-demand graph expansion</h2>
+      <ul style="margin-top:16px;">
+        <li>Click any neighbor node to load its own interactions</li>
+        <li>New subgraph patches stream in and merge live</li>
+        <li>Panel updates with the selected node's summary</li>
+        <li>Graph layout re-simulates to accommodate new nodes</li>
+      </ul>
+    </div>
+    <div style="flex:1; text-align:center;">
+      <img src="screenshots/6.png"
+           alt="Expanded graph — BAX node selected and expanded with its own neighbors"
+           style="max-width:100%; max-height:400px; border-radius:10px;
+                  box-shadow:0 4px 24px rgba(0,0,0,0.12); border:1px solid #e8e8e8;" />
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 13 — SCREENSHOT: What-if setup
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Step 6 — Set up a What-if perturbation</h3>
+  <div class="rule"></div>
+
+  <div class="cols" style="margin-top:24px; align-items:center; gap:40px;">
+    <div style="flex:1; text-align:center;">
+      <img src="screenshots/7.png"
+           alt="What-if tab — BCL2 selected, Inhibit perturbation chosen"
+           style="max-width:100%; max-height:400px; border-radius:10px;
+                  box-shadow:0 4px 24px rgba(0,0,0,0.12); border:1px solid #e8e8e8;" />
+    </div>
+    <div>
+      <h2 style="font-size:1.15em;">Four perturbation types</h2>
+      <ul style="margin-top:16px;">
+        <li><strong>Inhibit</strong> — model drug blockade (e.g. venetoclax on BCL2)</li>
+        <li><strong>Activate</strong> — simulate overexpression or agonist</li>
+        <li><strong>Up / downregulate</strong> — continuous dose modelling</li>
+        <li>Click the graph to select any protein as target</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 14 — SCREENSHOT: What-if result + cascade overlay
+═══════════════════════════════════════════════════════════ -->
+<section>
+  <h3>Step 7 — Hypothesis + cascade overlay</h3>
+  <div class="rule"></div>
+
+  <div class="cols" style="margin-top:24px; align-items:center; gap:40px;">
+    <div>
+      <h2 style="font-size:1.15em;">AI-generated cascade analysis</h2>
+      <ul style="margin-top:16px;">
+        <li>Graph highlights propagated downstream effects in green</li>
+        <li>Target node marked <strong>BLOCK</strong> with red overlay</li>
+        <li>Panel shows: Known Context · Hypothesised Effects · Downstream Candidates</li>
+        <li>Confidence score + uncertainty notes included</li>
+      </ul>
+    </div>
+    <div style="flex:1; text-align:center;">
+      <img src="screenshots/8.png"
+           alt="What-if result — green cascade overlay, hypothesis panel"
+           style="max-width:100%; max-height:400px; border-radius:10px;
+                  box-shadow:0 4px 24px rgba(0,0,0,0.12); border:1px solid #e8e8e8;" />
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 15 — DEMO / CLOSING
+═══════════════════════════════════════════════════════════ -->
+<section class="title-slide">
+  <div class="logo-wrap" style="margin-bottom:40px;">
+    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+      <g stroke="#b8d9f5" stroke-width="1.4" stroke-linecap="round">
+        <line x1="50" y1="50" x2="22" y2="24"/><line x1="50" y1="50" x2="50" y2="14"/>
+        <line x1="50" y1="50" x2="78" y2="24"/><line x1="50" y1="50" x2="86" y2="50"/>
+        <line x1="50" y1="50" x2="78" y2="76"/><line x1="50" y1="50" x2="50" y2="86"/>
+        <line x1="50" y1="50" x2="22" y2="76"/><line x1="50" y1="50" x2="14" y2="50"/>
+        <line x1="22" y1="24" x2="50" y2="14"/><line x1="78" y1="24" x2="86" y2="50"/>
+        <line x1="78" y1="76" x2="50" y2="86"/><line x1="22" y1="76" x2="14" y2="50"/>
+      </g>
+      <g fill="#c9e4f8">
+        <circle cx="8"  cy="8"  r="4"/><circle cx="92" cy="10" r="4"/>
+        <circle cx="88" cy="92" r="4"/><circle cx="10" cy="90" r="4"/>
+      </g>
+      <g fill="#4096ff">
+        <circle cx="22" cy="24" r="7.5"/><circle cx="78" cy="24" r="7.5"/>
+        <circle cx="86" cy="50" r="7.5"/><circle cx="78" cy="76" r="7.5"/>
+        <circle cx="50" cy="86" r="7.5"/><circle cx="22" cy="76" r="7.5"/>
+        <circle cx="14" cy="50" r="7.5"/><circle cx="50" cy="14" r="7.5"/>
+      </g>
+      <circle cx="50" cy="50" r="19" fill="#bdd8f5"/>
+      <circle cx="50" cy="50" r="14" fill="#1677ff"/>
+      <circle cx="50" cy="50" r="9"  fill="#0a4fc4"/>
+    </svg>
+    <div>
+      <div class="wordmark">cascade</div>
+      <div class="tagline">Molecular Intelligence</div>
+    </div>
+  </div>
+
+  <h2 style="font-size:1.3em; font-weight:300; margin-bottom:16px;">
+    From gene symbol to grounded hypothesis<br/>
+    <strong style="font-weight:700;">in under 10 seconds.</strong>
+  </h2>
+
+  <p style="font-size:0.62em; margin-bottom:36px; max-width:500px;">
+    Try: <code style="background:#f5f5f5; padding:2px 8px; border-radius:4px; color:#d4380d;">BCL2</code>,
+    <code style="background:#f5f5f5; padding:2px 8px; border-radius:4px; color:#d4380d;">TP53</code>, or
+    <code style="background:#f5f5f5; padding:2px 8px; border-radius:4px; color:#d4380d;">EGFR</code>
+  </p>
+
+  <div>
+    <span class="tag sponsor">GMI Cloud</span>
+    <span class="tag sponsor">Kimi K2</span>
+    <span class="tag sponsor">HydraDB</span>
+    <span class="tag">STRING DB</span>
+    <span class="tag">OmniPath</span>
+    <span class="tag">MyGene.info</span>
+  </div>
+</section>
+
+
+</div><!-- /.slides -->
+</div><!-- /.reveal -->
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: true,
+    progress: false,
+    controls: false,
+    transition: "fade",
+    transitionSpeed: "fast",
+    backgroundTransition: "none",
+    width: 1280,
+    height: 720,
+    margin: 0.06,
+    plugins: [],
+  });
+</script>
+</body>
+</html>
