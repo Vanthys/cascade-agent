@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import Markdown from "react-markdown";
 import { Typography, Tag, Divider, Button, Spin, Tooltip, Alert } from "antd";
 import {
   NodeIndexOutlined,
@@ -393,8 +394,8 @@ export default function InfoPanel({
         )}
 
         {/* Main streamed summary / explanation */}
-        <Paragraph style={{ fontSize: 13, lineHeight: 1.75, color: "#262626", marginBottom: 0 }}>
-          {displayedText}
+        <div className="panel-markdown">
+          <Markdown>{displayedText}</Markdown>
           {isStreaming && (
             <span
               style={{
@@ -408,7 +409,7 @@ export default function InfoPanel({
               }}
             />
           )}
-        </Paragraph>
+        </div>
 
         {/* What-if hint for nodes */}
         {isNode && !isStreaming && displayedText && conversation.length === 0 && (
@@ -432,6 +433,7 @@ export default function InfoPanel({
                 }}
               >
                 <div
+                  className={msg.role === "assistant" ? "panel-markdown bubble-assistant" : "bubble-user"}
                   style={{
                     maxWidth: "85%",
                     padding: "8px 12px",
@@ -441,10 +443,13 @@ export default function InfoPanel({
                     color: msg.role === "user" ? "#fff" : "#262626",
                     fontSize: 12,
                     lineHeight: 1.6,
-                    whiteSpace: "pre-wrap",
                   }}
                 >
-                  {msg.text}
+                  {msg.role === "assistant" ? (
+                    <Markdown>{msg.text}</Markdown>
+                  ) : (
+                    msg.text
+                  )}
                   {i === conversation.length - 1 &&
                     msg.role === "assistant" &&
                     followUpLoading && (
