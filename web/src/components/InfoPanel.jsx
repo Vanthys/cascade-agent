@@ -394,7 +394,7 @@ export default function InfoPanel({
       <Divider style={{ margin: "8px 0" }} />
 
       {/* Scrollable content */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px 8px" }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "0 16px 8px" }}>
         {streamError && (
           <Alert
             type="warning"

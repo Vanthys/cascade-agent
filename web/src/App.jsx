@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { Layout, Typography, Button, Spin, Progress, Tag } from "antd";
-import { ExperimentOutlined, ReloadOutlined } from "@ant-design/icons";
+import { ExperimentOutlined, ReloadOutlined, ApartmentOutlined, BulbOutlined } from "@ant-design/icons";
 import ChatView from "./components/ChatView";
 import GraphCanvas from "./components/GraphCanvas";
 import InfoPanel from "./components/InfoPanel";
+import WhatIfPanel from "./components/WhatIfPanel";
 import { createSession, seedGraph, connectStream } from "./api/client";
+import { getMockWhatIfResult } from "./data/mockData";
 import "./App.css";
 
 const { Header, Content, Sider } = Layout;
@@ -12,31 +14,39 @@ const { Text } = Typography;
 
 const PANEL_WIDTH = 360;
 
-// Maps backend SSE step names → user-friendly labels
 const STEP_LABELS = {
-  normalise_prompt:   "Normalising gene symbol…",
-  retrieve_context:   "Retrieving session context…",
-  research_seed_gene: "Fetching gene data from literature…",
-  find_adjacent_genes:"Finding adjacent interactors…",
-  build_graph:        "Building interaction graph…",
-  generate_summary:   "Generating summary…",
+  normalise_prompt:    "Normalising gene symbol…",
+  retrieve_context:    "Retrieving session context…",
+  research_seed_gene:  "Fetching gene data from literature…",
+  find_adjacent_genes: "Finding adjacent interactors…",
+  build_graph:         "Building interaction graph…",
+  generate_summary:    "Generating summary…",
 };
 const TOTAL_STEPS = Object.keys(STEP_LABELS).length;
 
+const TABS = [
+  { key: "overview", label: "Overview", icon: <ApartmentOutlined /> },
+  { key: "whatif",   label: "What-if",  icon: <BulbOutlined /> },
+];
+
 export default function App() {
-  const [phase, setPhase] = useState("chat"); // "chat" | "loading" | "graph"
-  const [sessionId, setSessionId] = useState(null);
-  const [seedGene, setSeedGene] = useState(null);
-  const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
-  const [selection, setSelection] = useState(null);
+  const [phase, setPhase]               = useState("chat");
+  const [sessionId, setSessionId]       = useState(null);
+  const [seedGene, setSeedGene]         = useState(null);
+  const [graphData, setGraphData]       = useState({ nodes: [], edges: [] });
+  const [selection, setSelection]       = useState(null);
   const [progressStep, setProgressStep] = useState(0);
   const [progressText, setProgressText] = useState("");
   const [expandedNodes, setExpandedNodes] = useState(new Set());
-  const [error, setError] = useState(null);
+  const [error, setError]               = useState(null);
+
+  const [activeTab, setActiveTab]       = useState("overview");
+  const [whatIfTarget, setWhatIfTarget] = useState(null);
+  const [whatIfResult, setWhatIfResult] = useState(null);
+  const [whatIfLoading, setWhatIfLoading] = useState(false);
 
   const stopStreamRef = useRef(null);
 
-  // Create a session on first mount
   useEffect(() => {
     createSession()
       .then((data) => setSessionId(data.session_id))
@@ -44,8 +54,11 @@ export default function App() {
     return () => stopStreamRef.current?.();
   }, []);
 
-  // ── Seed graph workflow ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab === "overview") setWhatIfResult(null);
+  }, [activeTab]);
 
+  // ── Seed graph ────────────────────────────────────────────────────────────
   const handleSubmit = async (prompt) => {
     if (!sessionId) return;
 
@@ -56,8 +69,10 @@ export default function App() {
     setProgressStep(0);
     setProgressText(STEP_LABELS.normalise_prompt);
     setError(null);
+    setActiveTab("overview");
+    setWhatIfTarget(null);
+    setWhatIfResult(null);
 
-    // Accumulated graph state from patches
     const accNodes = {};
     const accEdges = {};
     let summaryText = "";
@@ -74,22 +89,13 @@ export default function App() {
             setProgressText(STEP_LABELS[step] ?? step.replace(/_/g, " ") + "…");
           }
         },
-
         graph_patch({ nodes, edges }) {
           nodes.forEach((n) => (accNodes[n.id] = n));
           edges.forEach((e) => (accEdges[e.id] = e));
-          setGraphData({
-            nodes: Object.values(accNodes),
-            edges: Object.values(accEdges),
-          });
+          setGraphData({ nodes: Object.values(accNodes), edges: Object.values(accEdges) });
         },
-
-        summary_chunk({ text }) {
-          summaryText = text;
-        },
-
+        summary_chunk({ text }) { summaryText = text; },
         completed() {
-          // Attach the LLM summary to the seed node's meta so InfoPanel shows it
           const seedNodeId = `gene_${gene}`;
           if (accNodes[seedNodeId] && summaryText) {
             accNodes[seedNodeId] = {
@@ -97,57 +103,53 @@ export default function App() {
               meta: { ...accNodes[seedNodeId].meta, summary: summaryText },
             };
           }
-
-          const finalGraph = {
-            nodes: Object.values(accNodes),
-            edges: Object.values(accEdges),
-          };
+          const finalGraph = { nodes: Object.values(accNodes), edges: Object.values(accEdges) };
           setGraphData(finalGraph);
           setPhase("graph");
-
-          // Auto-select the seed node
           const seedNode = accNodes[seedNodeId] ?? Object.values(accNodes)[0];
           if (seedNode) setSelection({ _type: "node", ...seedNode });
-          
           setExpandedNodes(new Set([seedNodeId]));
         },
-
         error({ message, recoverable }) {
-          console.error("Stream error:", message);
           setError(message);
           if (!recoverable) setPhase("chat");
         },
       });
-
       stopStreamRef.current = stop;
     } catch (err) {
-      console.error("Failed to start seed workflow:", err);
       setError(err.message);
       setPhase("chat");
     }
   };
 
-  // ── Graph patch callback (used by InfoPanel when expanding nodes) ──────────
-
+  // ── Graph patch ───────────────────────────────────────────────────────────
   const handleGraphPatch = ({ nodes = [], edges = [] }) => {
     setGraphData((prev) => {
       const nodeMap = Object.fromEntries(prev.nodes.map((n) => [n.id, n]));
       const edgeMap = Object.fromEntries(prev.edges.map((e) => [e.id, e]));
       nodes.forEach((n) => (nodeMap[n.id] = n));
       edges.forEach((e) => (edgeMap[e.id] = e));
-      return {
-        nodes: Object.values(nodeMap),
-        edges: Object.values(edgeMap),
-      };
+      return { nodes: Object.values(nodeMap), edges: Object.values(edgeMap) };
     });
   };
 
-  // ── Navigation ────────────────────────────────────────────────────────────
-
-  const handleNodeExpanded = (nodeId) => {
+  const handleNodeExpanded = (nodeId) =>
     setExpandedNodes((prev) => new Set(prev).add(nodeId));
+
+  // ── What-if ───────────────────────────────────────────────────────────────
+  const handleRunWhatIf = (targetNode, perturbationType) => {
+    setWhatIfLoading(true);
+    setWhatIfResult(null);
+    setTimeout(() => {
+      const raw = getMockWhatIfResult(targetNode.id, targetNode.label, perturbationType);
+      setWhatIfResult({ ...raw, nodeId: targetNode.id, nodeLabel: targetNode.label, type: perturbationType });
+      setWhatIfLoading(false);
+    }, 1200);
   };
 
+  const handleResetWhatIf = () => { setWhatIfResult(null); setWhatIfTarget(null); };
+
+  // ── Navigation ────────────────────────────────────────────────────────────
   const handleNewSearch = () => {
     stopStreamRef.current?.();
     setPhase("chat");
@@ -156,15 +158,26 @@ export default function App() {
     setSelection(null);
     setExpandedNodes(new Set());
     setError(null);
+    setActiveTab("overview");
+    setWhatIfTarget(null);
+    setWhatIfResult(null);
   };
 
-  const handleSelectNode = (node) => setSelection({ _type: "node", ...node });
-  const handleSelectEdge = (edge) => setSelection({ _type: "edge", ...edge });
+  const handleSelectNode = (node) => {
+    if (activeTab === "whatif") {
+      setWhatIfTarget(node);
+      setWhatIfResult(null);
+    } else {
+      setSelection({ _type: "node", ...node });
+    }
+  };
+  const handleSelectEdge = (edge) => {
+    if (activeTab === "overview") setSelection({ _type: "edge", ...edge });
+  };
 
   const progressPercent = Math.round((progressStep / TOTAL_STEPS) * 100);
 
   // ── Loading ───────────────────────────────────────────────────────────────
-
   if (phase === "loading") {
     return (
       <div className="loading-screen">
@@ -172,59 +185,50 @@ export default function App() {
         <div style={{ textAlign: "center" }}>
           <Text strong style={{ fontSize: 16, display: "block", marginBottom: 4 }}>
             Researching{" "}
-            <Tag color="blue" style={{ fontSize: 14, fontWeight: 700 }}>
-              {seedGene}
-            </Tag>
+            <Tag color="blue" style={{ fontSize: 14, fontWeight: 700 }}>{seedGene}</Tag>
           </Text>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            {progressText}
-          </Text>
+          <Text type="secondary" style={{ fontSize: 13 }}>{progressText}</Text>
         </div>
-        <Progress
-          percent={progressPercent}
-          status="active"
-          strokeColor="#1677ff"
-          style={{ width: 320 }}
-          showInfo={false}
-        />
+        <Progress percent={progressPercent} status="active" strokeColor="#1677ff" style={{ width: 320 }} showInfo={false} />
         <Spin size="small" />
       </div>
     );
   }
 
   // ── Chat ──────────────────────────────────────────────────────────────────
-
   if (phase === "chat") {
-    return (
-      <ChatView
-        onSubmit={handleSubmit}
-        loading={!sessionId}
-        error={error}
-      />
-    );
+    return <ChatView onSubmit={handleSubmit} loading={!sessionId} error={error} />;
   }
 
   // ── Graph ─────────────────────────────────────────────────────────────────
-
   const seedId = graphData?.nodes[0]?.id;
+
+  const perturbationOverlay = whatIfResult
+    ? { type: whatIfResult.type, targetNodeId: whatIfResult.nodeId, affectedNodes: whatIfResult.affected_nodes, affectedEdgeIds: whatIfResult.affected_edge_ids }
+    : null;
 
   return (
     <Layout className="graph-layout">
       <Header className="app-header">
         <ExperimentOutlined style={{ color: "#1677ff", fontSize: 16 }} />
-        <Text strong style={{ fontSize: 14 }}>
-          Gene Interaction Explorer
-        </Text>
+        <Text strong style={{ fontSize: 14 }}>Gene Interaction Explorer</Text>
+
+        <div className="tab-bar">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              className={`tab-btn${activeTab === tab.key ? " tab-btn--active" : ""}`}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <div style={{ flex: 1 }} />
-        <Tag color="blue" style={{ fontWeight: 700, fontSize: 13 }}>
-          {seedGene}
-        </Tag>
-        <Button
-          icon={<ReloadOutlined />}
-          size="small"
-          onClick={handleNewSearch}
-          style={{ marginLeft: 8 }}
-        >
+        <Tag color="blue" style={{ fontWeight: 700, fontSize: 13 }}>{seedGene}</Tag>
+        <Button icon={<ReloadOutlined />} size="small" onClick={handleNewSearch} style={{ marginLeft: 8 }}>
           New search
         </Button>
       </Header>
@@ -236,9 +240,14 @@ export default function App() {
               graphData={graphData}
               seedId={seedId}
               expandedNodes={expandedNodes}
-              selectedNodeId={selection?._type === "node" ? selection.id : null}
+              selectedNodeId={
+                activeTab === "overview"
+                  ? (selection?._type === "node" ? selection.id : null)
+                  : (whatIfTarget?.id ?? null)
+              }
               onSelectNode={handleSelectNode}
               onSelectEdge={handleSelectEdge}
+              perturbationOverlay={perturbationOverlay}
             />
           )}
         </Content>
@@ -248,20 +257,31 @@ export default function App() {
           style={{
             background: "#ffffff",
             borderLeft: "1px solid #f0f0f0",
-            display: "flex",
-            flexDirection: "column",
             overflow: "hidden",
             boxShadow: "-4px 0 16px rgba(0,0,0,0.06)",
           }}
         >
-          <InfoPanel
-            selection={selection}
-            graphData={graphData}
-            sessionId={sessionId}
-            onNewSearch={handleNewSearch}
-            onGraphPatch={handleGraphPatch}
-            onNodeExpanded={handleNodeExpanded}
-          />
+          {activeTab === "overview" ? (
+            <InfoPanel
+              selection={selection}
+              graphData={graphData}
+              sessionId={sessionId}
+              onNewSearch={handleNewSearch}
+              onGraphPatch={handleGraphPatch}
+              onNodeExpanded={handleNodeExpanded}
+            />
+          ) : (
+            <WhatIfPanel
+              graphData={graphData}
+              whatIfTarget={whatIfTarget}
+              onSelectTarget={(node) => { setWhatIfTarget(node); setWhatIfResult(null); }}
+              onRun={handleRunWhatIf}
+              result={whatIfResult}
+              loading={whatIfLoading}
+              onReset={handleResetWhatIf}
+              onNewSearch={handleNewSearch}
+            />
+          )}
         </Sider>
       </Layout>
     </Layout>
