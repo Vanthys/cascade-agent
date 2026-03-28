@@ -10,10 +10,14 @@ The ResearchAggregator merges output from both and normalises provenance.
 from __future__ import annotations
 
 import asyncio
+import copy
+import json
 import re
+from pathlib import Path
 from typing import Protocol
 
 import httpx
+from cachetools import TTLCache
 
 from app.core.exceptions import ResearchError
 from app.core.logging import get_logger
@@ -252,27 +256,82 @@ class ResearchAggregator:
     def __init__(self, http_client: httpx.AsyncClient):
         self._mygene = MyGeneProvider(http_client)
         self._string = StringDbProvider(http_client)
+        self._cache = TTLCache(maxsize=1000, ttl=86400 * 7)  # 7 days cache
+        self._cache_path = Path(".research_cache.json")
+        self._load_cache()
+
+    def _load_cache(self):
+        if not self._cache_path.exists():
+            return
+        try:
+            with open(self._cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for k, v in data.items():
+                if k.startswith("facts:"):
+                    self._cache[k] = GeneFacts.model_validate(v)
+                elif k.startswith("neighbors:"):
+                    self._cache[k] = [GeneRelation.model_validate(x) for x in v]
+                elif k.startswith("edge:"):
+                    self._cache[k] = [ResearchEvidence.model_validate(x) for x in v]
+        except Exception as exc:
+            log.warning(f"Could not load research cache: {exc}")
+
+    def _save_cache(self):
+        try:
+            data = {}
+            for k, v in self._cache.items():
+                if k.startswith("facts:"):
+                    data[k] = v.model_dump(mode="json")
+                else:
+                    data[k] = [x.model_dump(mode="json") for x in v]
+            with open(self._cache_path, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except Exception as exc:
+            log.warning(f"Could not save research cache: {exc}")
 
     async def get_gene_facts(self, symbol: str, species: str = "human") -> GeneFacts:
         # Run in parallel — mygene for facts, string for neighbors
+        # We reuse the cached basics instead of creating redundant calls
         facts, neighbors = await asyncio.gather(
-            self._mygene.get_gene(symbol, species),
-            self._string.get_neighbors(symbol, species),
+            self.get_basic_facts(symbol, species),
+            self.get_neighbors(symbol, species),
         )
         facts.neighbors = neighbors
         return facts
 
     async def get_basic_facts(self, symbol: str, species: str = "human") -> GeneFacts:
         """Fetch only MyGene facts (no neighbor traversal)."""
-        return await self._mygene.get_gene(symbol, species)
+        key = f"facts:{symbol}:{species}"
+        if key in self._cache:
+            return copy.deepcopy(self._cache[key])
+
+        facts = await self._mygene.get_gene(symbol, species)
+        self._cache[key] = copy.deepcopy(facts)
+        self._save_cache()
+        return facts
 
     async def get_neighbors(self, symbol: str, species: str = "human") -> list[GeneRelation]:
-        return await self._string.get_neighbors(symbol, species)
+        key = f"neighbors:{symbol}:{species}"
+        if key in self._cache:
+            return copy.deepcopy(self._cache[key])
+
+        neighbors = await self._string.get_neighbors(symbol, species)
+        self._cache[key] = copy.deepcopy(neighbors)
+        self._save_cache()
+        return neighbors
 
     async def get_edge_evidence(
         self, source: str, target: str
     ) -> list[ResearchEvidence]:
-        return await self._string.get_edge_evidence(source, target)
+        ordered = tuple(sorted([source, target]))
+        key = f"edge:{ordered[0]}:{ordered[1]}"
+        if key in self._cache:
+            return copy.deepcopy(self._cache[key])
+
+        evidence = await self._string.get_edge_evidence(source, target)
+        self._cache[key] = copy.deepcopy(evidence)
+        self._save_cache()
+        return evidence
 
 
 def make_aggregator(http_client: httpx.AsyncClient) -> ResearchAggregator:

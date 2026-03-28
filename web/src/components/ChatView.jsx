@@ -1,11 +1,22 @@
-import { Alert } from "antd";
-import { Typography } from "antd";
+import { Alert, Button } from "antd";
 import { ExperimentOutlined } from "@ant-design/icons";
 import PromptInput from "./PromptInput";
 
-const { Title, Paragraph, Text } = Typography;
+function Text({ children, style }) {
+  return <span style={style}>{children}</span>;
+}
+
+function Title({ children, style }) {
+  return <h1 style={{ margin: 0, ...style }}>{children}</h1>;
+}
+
+function Paragraph({ children, style }) {
+  return <p style={style}>{children}</p>;
+}
 
 export default function ChatView({ onSubmit, loading, error }) {
+  const suggestions = ["TP53", "BRCA1", "EGFR", "MYC"];
+
   return (
     <div
       style={{
@@ -35,7 +46,7 @@ export default function ChatView({ onSubmit, loading, error }) {
         <ExperimentOutlined style={{ fontSize: 30, color: "#fff" }} />
       </div>
 
-      <Title level={2} style={{ marginBottom: 8, textAlign: "center", fontWeight: 700 }}>
+      <Title style={{ fontSize: 32, marginBottom: 8, textAlign: "center", fontWeight: 700 }}>
         Gene Interaction Explorer
       </Title>
 
@@ -87,6 +98,26 @@ export default function ChatView({ onSubmit, loading, error }) {
           placeholder={loading ? "Connecting to backend…" : "Try: TP53, BRCA1, EGFR, MYC…"}
           autoFocus
         />
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            marginTop: 12,
+          }}
+        >
+          {suggestions.map((suggestion) => (
+            <Button
+              key={suggestion}
+              size="small"
+              disabled={loading}
+              onClick={() => onSubmit(suggestion)}
+              style={{ borderRadius: 999, fontWeight: 600 }}
+            >
+              {suggestion}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {error && (

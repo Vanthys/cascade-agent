@@ -84,6 +84,7 @@ class WhatIfRequest(BaseModel):
     target_type: str = Field(..., description="'node' or 'edge'")
     target_id: str
     perturbation: PerturbationType
+    prompt: str | None = Field(None, description="Optional user question to focus the hypothesis")
 
 
 class WhatIfResponse(BaseModel):

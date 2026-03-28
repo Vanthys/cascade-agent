@@ -34,6 +34,7 @@ Rules:
 3. Do NOT present hypotheses as established fact.
 4. Return valid JSON only — no prose outside the JSON structure.
 5. Keep responses concise and tightly scoped to the question.
+6. Finish cleanly. Do not end mid-sentence or with an obviously truncated thought.
 """
 
 
@@ -158,12 +159,12 @@ Gene: {gene}
 Facts: {json.dumps(facts, indent=2)}
 Graph context (neighbors): {json.dumps(graph_context, indent=2)}{user_question}
 
-Provide a concise biological summary of the gene. If the user asked a question, answer it directly.
+Provide a concise but complete biological summary of the gene. If the user asked a question, answer it directly.
 Evaluate the provided graph context (neighbors) and suggest the most promising genes to explore next.
 
 Return JSON with this exact schema:
 {{
-  "summary": "2–3 sentence concise biological summary, answering the user question if provided, and highlighting the most important connected neighbors.",
+  "summary": "2-4 complete sentences answering the user question if provided and highlighting the most important connected neighbors. End on a complete thought.",
   "key_roles": ["role1", "role2"],
   "suggested_next": ["gene_or_pathway to explore next"]
 }}
@@ -186,8 +187,8 @@ Available evidence: {json.dumps(evidence, indent=2)}
 
 Return JSON:
 {{
-  "known_mechanism": "What is established about this connection",
-  "likely_interpretation": "Most probable biological meaning",
+  "known_mechanism": "What is established about this connection in a complete sentence or two",
+  "likely_interpretation": "Most probable biological meaning, written as a complete sentence",
   "confidence": "high|medium|low",
   "uncertainty_notes": ["note1"]
 }}
@@ -200,19 +201,21 @@ Return JSON:
         perturbation: str,
         graph_context: dict[str, Any],
         evidence_packets: list[dict],
+        user_question: str | None = None,
     ) -> dict[str, Any]:
         """Generate hypothesis for a perturbation scenario."""
+        user_prompt = f"\nUser question: {user_question}" if user_question else ""
         prompt = f"""
 Task: what_if_hypothesis
 
 Focus gene: {focus_gene}
 Perturbation: {perturbation}
 Local graph context: {json.dumps(graph_context, indent=2)}
-Evidence: {json.dumps(evidence_packets, indent=2)}
+Evidence: {json.dumps(evidence_packets, indent=2)}{user_prompt}
 
 Return JSON:
 {{
-  "question": "What if {focus_gene} is {perturbation}?",
+  "question": "A specific what-if question that incorporates the user's wording when provided",
   "known_context": ["established fact 1", "established fact 2"],
   "hypotheses": ["hypothesis 1", "hypothesis 2"],
   "downstream_candidates": ["GENE1", "GENE2"],
@@ -222,5 +225,6 @@ Return JSON:
 
 IMPORTANT: known_context must contain ONLY statements supported by the evidence.
 hypotheses must be clearly speculative and labelled as such.
+When a user question is provided, tailor the question, hypotheses, and downstream candidates to that specific gene-interaction concern.
 """
         return await self.complete_json(prompt, model=settings.gmi_strong_model, temperature=0.4)

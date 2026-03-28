@@ -45,12 +45,13 @@ export async function explainEdge(sessionId, edgeId) {
 }
 
 /** Run a what-if perturbation hypothesis. Returns { request_id, stream_url }. */
-export async function runWhatIf(sessionId, targetId, targetType, perturbation) {
+export async function runWhatIf(sessionId, targetId, targetType, perturbation, prompt = null) {
   return post('/whatif', {
     session_id: sessionId,
     target_id: targetId,
     target_type: targetType,
     perturbation,
+    prompt,
   });
 }
 
@@ -66,7 +67,7 @@ export function connectStream(requestId, handlers = {}) {
 
   const EVENTS = [
     'started', 'progress', 'graph_patch', 'summary_chunk',
-    'evidence', 'completed', 'error',
+    'hypothesis', 'evidence', 'completed', 'error',
   ];
 
   EVENTS.forEach((type) => {
@@ -83,7 +84,7 @@ export function connectStream(requestId, handlers = {}) {
     es.close();
     handlers.onClose?.();
   });
-  es.addEventListener('error', (e) => {
+  es.addEventListener('error', () => {
     es.close();
     handlers.onClose?.();
   });
@@ -111,4 +112,9 @@ export function detectPerturbation(text) {
   if (t.includes('overexpres')) return 'overexpression';
   if (t.includes('disrupt') || t.includes('block') || t.includes('inhibit')) return 'disruption';
   return null;
+}
+
+export function isWhatIfPrompt(text) {
+  const t = text.toLowerCase();
+  return t.startsWith('/whatif') || t.includes('what if') || t.includes('if ') || detectPerturbation(t) !== null;
 }

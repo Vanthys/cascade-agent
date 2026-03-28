@@ -35,6 +35,12 @@ const PERTURB_COLORS = {
   downregulate: "#fa8c16",
   upregulate:   "#1677ff",
 };
+const PERTURB_LABELS = {
+  inhibit: "BLOCK",
+  activate: "BOOST",
+  downregulate: "DOWN",
+  upregulate: "UP",
+};
 
 export default function GraphCanvas({
   graphData,
@@ -175,7 +181,7 @@ export default function GraphCanvas({
             d.fx = event.x;
             d.fy = event.y;
           })
-          .on("end", (event, d) => {
+          .on("end", (event) => {
             if (!event.active) sim.alphaTarget(0);
             // Keep node pinned where it was dropped — no snap-back
             // d.fx / d.fy intentionally left set
@@ -198,6 +204,17 @@ export default function GraphCanvas({
       .attr("font-weight", 600)
       .style("pointer-events", "none")
       .style("user-select", "none");
+
+    node.append("text")
+      .attr("class", "effect-badge")
+      .attr("text-anchor", "middle")
+      .attr("dy", (d) => -(nodeR(d) + 12))
+      .attr("font-size", 9)
+      .attr("font-weight", 700)
+      .attr("fill", "#ffffff")
+      .style("pointer-events", "none")
+      .style("user-select", "none")
+      .style("opacity", 0);
 
     // ── Tick ──────────────────────────────────────────────────────────────
     function updateLines(sel) {
@@ -249,6 +266,9 @@ export default function GraphCanvas({
       .attr("stroke",       (d) => d.id === selectedNodeId ? "#fa8c16" : expandedNodes?.has(d.id) ? "#0958d9" : "#e0e0e0")
       .attr("stroke-width", (d) => d.id === selectedNodeId ? 3 : 1.5)
       .attr("fill-opacity", 1);
+    svg.selectAll(".nodes .effect-badge")
+      .text("")
+      .style("opacity", 0);
     svg.selectAll(".edges line.vis")
       .attr("stroke-opacity", 0.65)
       .attr("stroke-width", 1.5)
@@ -258,14 +278,20 @@ export default function GraphCanvas({
 
     const { type, targetNodeId, affectedNodes = [], affectedEdgeIds = [] } = perturbationOverlay;
     const targetColor = PERTURB_COLORS[type] ?? "#8c8c8c";
+    const targetFill = type === "inhibit" || type === "downregulate" ? "#fff2f0" : "#f6ffed";
 
     // Style the direct target node
     svg.selectAll(".nodes circle")
       .filter((d) => d.id === targetNodeId)
       .attr("stroke", targetColor)
-      .attr("stroke-width", 3)
-      .attr("fill", type === "inhibit" || type === "downregulate" ? "#fff2f0" : "#f6ffed")
+      .attr("stroke-width", 4)
+      .attr("fill", targetFill)
       .attr("fill-opacity", 1);
+    svg.selectAll(".nodes .effect-badge")
+      .filter((d) => d.id === targetNodeId)
+      .text(PERTURB_LABELS[type] ?? "PERTURB")
+      .attr("fill", targetColor)
+      .style("opacity", 1);
 
     // Style downstream affected nodes
     affectedNodes.forEach(({ id, effect }) => {
@@ -277,14 +303,21 @@ export default function GraphCanvas({
         .attr("stroke-width", 2)
         .attr("fill", fill)
         .attr("fill-opacity", 0.85);
+      svg.selectAll(".nodes .effect-badge")
+        .filter((d) => d.id === id)
+        .text(effect === "increase" ? "+INCREASE" : "-DECREASE")
+        .attr("fill", col)
+        .style("opacity", 1);
     });
 
     // Highlight affected edges
     affectedEdgeIds.forEach((edgeId) => {
       svg.selectAll(".edges line.vis")
         .filter((d) => d.id === edgeId)
+        .attr("stroke", targetColor)
         .attr("stroke-opacity", 1)
-        .attr("stroke-width", 2.5);
+        .attr("stroke-width", 3)
+        .attr("stroke-dasharray", type === "inhibit" || type === "downregulate" ? "8 4" : "2 0");
     });
   }, [perturbationOverlay, expandedNodes, selectedNodeId]);
 

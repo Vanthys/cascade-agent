@@ -16,6 +16,7 @@ class EventType(str, Enum):
     progress = "progress"
     graph_patch = "graph_patch"
     summary_chunk = "summary_chunk"
+    hypothesis = "hypothesis"
     evidence = "evidence"
     completed = "completed"
     error = "error"
@@ -52,6 +53,10 @@ def graph_patch_event(nodes: list, edges: list) -> SSEEvent:
 
 def summary_chunk_event(text: str) -> SSEEvent:
     return SSEEvent(event=EventType.summary_chunk, data={"text": text})
+
+
+def hypothesis_event(payload: dict[str, Any]) -> SSEEvent:
+    return SSEEvent(event=EventType.hypothesis, data=payload)
 
 
 def evidence_event(items: list) -> SSEEvent:

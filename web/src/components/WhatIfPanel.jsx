@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Typography,
   Button,
   Select,
   Divider,
@@ -20,7 +19,23 @@ import {
 } from "@ant-design/icons";
 import Markdown from "react-markdown";
 
-const { Text, Title } = Typography;
+function Text({ children, strong, type, style }) {
+  return (
+    <span
+      style={{
+        color: type === "secondary" ? "#8c8c8c" : "inherit",
+        fontWeight: strong ? 700 : 400,
+        ...style,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Title({ children, style }) {
+  return <h4 style={{ margin: 0, ...style }}>{children}</h4>;
+}
 
 // ─── Perturbation type config ─────────────────────────────────────────────────
 const PERTURBATION_TYPES = [
@@ -108,7 +123,6 @@ export default function WhatIfPanel({
   const [perturbationType, setPerturbationType] = useState(null);
 
   const nodes = graphData?.nodes ?? [];
-  const selectedType = PERTURBATION_TYPES.find((t) => t.key === perturbationType);
 
   const handleRun = () => {
     if (!whatIfTarget || !perturbationType) return;
@@ -131,7 +145,7 @@ export default function WhatIfPanel({
             <div>
               <Text type="secondary" style={{ fontSize: 11 }}>Perturbation analysis</Text>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                <Title level={4} style={{ margin: 0 }}>{result.nodeLabel}</Title>
+                <Title style={{ fontSize: 24, margin: 0 }}>{result.nodeLabel}</Title>
                 <Tag
                   icon={conf?.icon}
                   color={conf?.color}

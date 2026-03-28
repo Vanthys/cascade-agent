@@ -41,6 +41,7 @@ from app.models.events import (
     error_event,
     evidence_event,
     graph_patch_event,
+    hypothesis_event,
     progress_event,
     started_event,
     summary_chunk_event,
@@ -48,6 +49,7 @@ from app.models.events import (
 from app.repositories import evidence_repo, graph_repo
 from app.services.graph_service import GraphService
 from app.services.hypothesis_service import HypothesisService
+from app.services.cache_service import cache
 from app.services.memory_service import MemoryService
 from app.services.research_service import ResearchService
 
@@ -186,6 +188,7 @@ class Orchestrator:
             yield error_event("No graph found for session", recoverable=False)
             return
         yield progress_event("load_graph", "completed")
+        graph_hash = self._graph.graph_hash(current)
 
         # ── Parallel retrieval ────────────────────────────────────────────────
         yield progress_event("research_gene_deep", "running")
@@ -222,22 +225,30 @@ class Orchestrator:
 
         # ── Summary ───────────────────────────────────────────────────────────
         yield progress_event("generate_detail_panel", "running")
-        try:
-            neighbours_ctx = {
-                "neighbors": [
-                    {"gene": r.gene, "relation": r.relation.value}
-                    for r in facts.neighbors[:8]
-                ]
-            }
-            summary_result = await self._gmi.summarise_gene(
-                gene=gene,
-                facts={"summary": facts.summary, "pathways": facts.pathways},
-                graph_context=neighbours_ctx,
-                prompt=prompt,
+        cache_prompt = prompt or ""
+        detail_text = cache.get_session_answer(
+            session_id, "expand_gene", gene, cache_prompt, graph_hash
+        )
+        if detail_text is None:
+            try:
+                neighbours_ctx = {
+                    "neighbors": [
+                        {"gene": r.gene, "relation": r.relation.value}
+                        for r in facts.neighbors[:8]
+                    ]
+                }
+                summary_result = await self._gmi.summarise_gene(
+                    gene=gene,
+                    facts={"summary": facts.summary, "pathways": facts.pathways},
+                    graph_context=neighbours_ctx,
+                    prompt=prompt,
+                )
+                detail_text = summary_result.get("summary", facts.summary or "")
+            except GeneAgentError:
+                detail_text = facts.summary or f"{gene} detail unavailable"
+            cache.set_session_answer(
+                session_id, "expand_gene", gene, cache_prompt, detail_text, graph_hash
             )
-            detail_text = summary_result.get("summary", facts.summary or "")
-        except GeneAgentError:
-            detail_text = facts.summary or f"{gene} detail unavailable"
 
         yield summary_chunk_event(detail_text)
         yield progress_event("generate_detail_panel", "completed")
@@ -251,6 +262,8 @@ class Orchestrator:
 
         await memory_task
         await self._memory.store_interaction(session_id, "expand_gene", gene=gene)
+        if prompt and detail_text:
+            await self._memory.store_exchange(session_id, prompt, detail_text)
 
         yield completed_event(saved.graph_id, saved.version)
 
@@ -283,6 +296,7 @@ class Orchestrator:
         source_label = edge.source.replace("gene_", "").upper()
         target_label = edge.target.replace("gene_", "").upper()
         yield progress_event("resolve_edge", "completed")
+        graph_hash = self._graph.graph_hash(current)
 
         # ── Retrieve evidence ─────────────────────────────────────────────────
         yield progress_event("retrieve_edge_evidence", "running")
@@ -295,21 +309,29 @@ class Orchestrator:
 
         # ── Generate explanation ──────────────────────────────────────────────
         yield progress_event("explain_edge", "running")
-        try:
-            explanation = await self._gmi.explain_edge(
-                source=source_label,
-                target=target_label,
-                evidence=[
-                    {"source": ev.source_name, "snippet": ev.snippet}
-                    for ev in evidence[:5]
-                ],
+        cache_target = f"{source_label}:{target_label}"
+        text = cache.get_session_answer(
+            session_id, "explain_edge", cache_target, "", graph_hash
+        )
+        if text is None:
+            try:
+                explanation = await self._gmi.explain_edge(
+                    source=source_label,
+                    target=target_label,
+                    evidence=[
+                        {"source": ev.source_name, "snippet": ev.snippet}
+                        for ev in evidence[:5]
+                    ],
+                )
+                text = (
+                    f"{explanation.get('known_mechanism', '')} "
+                    f"{explanation.get('likely_interpretation', '')}"
+                ).strip()
+            except GeneAgentError:
+                text = f"{source_label}-{target_label}: edge explanation unavailable."
+            cache.set_session_answer(
+                session_id, "explain_edge", cache_target, "", text, graph_hash
             )
-            text = (
-                f"{explanation.get('known_mechanism', '')} "
-                f"{explanation.get('likely_interpretation', '')}"
-            ).strip()
-        except GeneAgentError:
-            text = f"{source_label}–{target_label}: edge explanation unavailable."
 
         yield summary_chunk_event(text)
         if evidence:
@@ -334,6 +356,7 @@ class Orchestrator:
         target_id: str,
         target_type: str,
         perturbation: PerturbationType,
+        prompt: str | None = None,
     ) -> AsyncGenerator[SSEEvent, None]:
         gene = target_id.replace("gene_", "").upper()
 
@@ -377,23 +400,49 @@ class Orchestrator:
 
         # ── Run hypothesis ────────────────────────────────────────────────────
         yield progress_event("generate_hypothesis", "running")
-        analysis = await self._hypothesis.run_what_if(
-            session_id=session_id,
-            target_id=target_id,
-            target_type=target_type,
-            perturbation=perturbation,
-            graph_context=subgraph,
-            evidence=evidence,
-            session_memory=session_memory,
+        cache_prompt = prompt or ""
+        cache_target = f"{target_id}:{perturbation.value}"
+        analysis = cache.get_session_answer(
+            session_id, "what_if", cache_target, cache_prompt, graph_hash
         )
+        if analysis is None:
+            analysis = await self._hypothesis.run_what_if(
+                session_id=session_id,
+                target_id=target_id,
+                target_type=target_type,
+                perturbation=perturbation,
+                graph_context=subgraph,
+                evidence=evidence,
+                session_memory=session_memory,
+                prompt=prompt,
+            )
+            cache.set_session_answer(
+                session_id, "what_if", cache_target, cache_prompt, analysis, graph_hash
+            )
         yield progress_event("generate_hypothesis", "completed")
 
-        # Stream result as summary chunk + completed
+        yield hypothesis_event(
+            {
+                "whatif_id": analysis.id,
+                "target_id": analysis.target_id,
+                "target_type": analysis.target_type,
+                "perturbation": analysis.perturbation.value,
+                "question": analysis.question,
+                "known_context": analysis.known_context,
+                "hypotheses": analysis.hypotheses,
+                "downstream_candidates": analysis.downstream_candidates,
+                "confidence": analysis.confidence.value,
+                "uncertainty_notes": analysis.uncertainty_notes,
+            }
+        )
+
         hypothesis_text = "\n".join(
-            [f"[KNOWN] {kc}" for kc in analysis.known_context]
+            [f"Question: {analysis.question}"] if analysis.question else []
+            + [f"[KNOWN] {kc}" for kc in analysis.known_context]
             + [f"[HYPOTHESIS] {h}" for h in analysis.hypotheses]
         )
-        yield summary_chunk_event(hypothesis_text)
+        if hypothesis_text:
+            yield summary_chunk_event(hypothesis_text)
 
         if analysis.references:
             yield evidence_event([r.model_dump(mode='json') for r in analysis.references])
@@ -408,6 +457,13 @@ class Orchestrator:
                 "confidence": analysis.confidence.value,
             },
         )
+        if prompt:
+            answer_text = "\n".join(
+                [f"Question: {analysis.question}"] if analysis.question else []
+                + [f"Known: {item}" for item in analysis.known_context]
+                + [f"Hypothesis: {item}" for item in analysis.hypotheses]
+            )
+            await self._memory.store_exchange(session_id, prompt, answer_text)
 
         yield completed_event(
             current.graph_id,

@@ -38,6 +38,7 @@ async def run_what_if(
                 body.target_id,
                 body.target_type,
                 body.perturbation,
+                body.prompt,
             ):
                 await queue.put(event)
         except Exception as exc:

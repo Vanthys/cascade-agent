@@ -136,7 +136,7 @@ class HydraClient:
             return
 
         try:
-            await self._client.user_memory.add(
+            await self._client.upload.add_memory(
                 memories=[
                     {
                         "user_assistant_pairs": [
@@ -167,7 +167,7 @@ class HydraClient:
             return
 
         try:
-            await self._client.user_memory.add(
+            await self._client.upload.add_memory(
                 memories=[
                     {
                         "text": text,

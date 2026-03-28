@@ -43,6 +43,7 @@ class HypothesisService:
         graph_context: dict,
         evidence: list[ResearchEvidence],
         session_memory: str = "",  # recalled context from HydraDB
+        prompt: str | None = None,
     ) -> WhatIfAnalysis:
         # Resolve gene label from target_id (e.g. "gene_TP53" → "TP53")
         gene_label = target_id.replace("gene_", "").upper()
@@ -69,6 +70,7 @@ class HypothesisService:
                 perturbation=perturbation.value,
                 graph_context=graph_context,
                 evidence_packets=evidence_dicts,
+                user_question=prompt,
             )
         except InferenceError:
             log.warning("hypothesis_inference_failed", target=target_id)

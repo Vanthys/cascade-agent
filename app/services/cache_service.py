@@ -40,6 +40,16 @@ class CacheService:
     def _key_whatif(self, target: str, perturbation: str, graph_hash: str) -> str:
         return f"whatif:{target}:{perturbation}:{graph_hash}"
 
+    def _key_session_answer(
+        self,
+        session_id: str,
+        action: str,
+        target: str,
+        prompt: str,
+        graph_hash: str = "",
+    ) -> str:
+        return f"answer:{session_id}:{action}:{target}:{prompt.strip().lower()}:{graph_hash}"
+
     # ── Generic get/set ───────────────────────────────────────────────────────
 
     def get(self, key: str) -> Any | None:
@@ -85,6 +95,32 @@ class CacheService:
 
     def set_whatif(self, target: str, perturbation: str, graph_hash: str, value: Any) -> None:
         self.set(self._key_whatif(target, perturbation, graph_hash), value)
+
+    def get_session_answer(
+        self,
+        session_id: str,
+        action: str,
+        target: str,
+        prompt: str,
+        graph_hash: str = "",
+    ) -> Any | None:
+        return self.get(
+            self._key_session_answer(session_id, action, target, prompt, graph_hash)
+        )
+
+    def set_session_answer(
+        self,
+        session_id: str,
+        action: str,
+        target: str,
+        prompt: str,
+        value: Any,
+        graph_hash: str = "",
+    ) -> None:
+        self.set(
+            self._key_session_answer(session_id, action, target, prompt, graph_hash),
+            value,
+        )
 
     def stats(self) -> dict:
         now = time.monotonic()

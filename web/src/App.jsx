@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Layout, Typography, Button, Spin, Progress, Tag } from "antd";
+import { Layout, Button, Spin, Progress, Tag } from "antd";
 import { ExperimentOutlined, ReloadOutlined, ApartmentOutlined, BulbOutlined } from "@ant-design/icons";
 import ChatView from "./components/ChatView";
 import GraphCanvas from "./components/GraphCanvas";
@@ -10,7 +10,20 @@ import { getMockWhatIfResult } from "./data/mockData";
 import "./App.css";
 
 const { Header, Content, Sider } = Layout;
-const { Text } = Typography;
+
+function Text({ children, strong, type, style }) {
+  return (
+    <span
+      style={{
+        color: type === "secondary" ? "#8c8c8c" : "inherit",
+        fontWeight: strong ? 700 : 400,
+        ...style,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
 
 const PANEL_WIDTH = 360;
 
@@ -29,6 +42,16 @@ const TABS = [
   { key: "whatif",   label: "What-if",  icon: <BulbOutlined /> },
 ];
 
+function resolveOverlayEdgeIds(edges, affectedEdgeIds = []) {
+  const liveEdgeIds = edges.map((edge) => edge.id);
+  return affectedEdgeIds
+    .map((edgeId) => {
+      if (liveEdgeIds.includes(edgeId)) return edgeId;
+      return liveEdgeIds.find((candidate) => candidate.startsWith(`${edgeId}_`)) ?? null;
+    })
+    .filter(Boolean);
+}
+
 export default function App() {
   const [phase, setPhase]               = useState("chat");
   const [sessionId, setSessionId]       = useState(null);
@@ -44,7 +67,6 @@ export default function App() {
   const [whatIfTarget, setWhatIfTarget] = useState(null);
   const [whatIfResult, setWhatIfResult] = useState(null);
   const [whatIfLoading, setWhatIfLoading] = useState(false);
-
   const stopStreamRef = useRef(null);
 
   useEffect(() => {
@@ -53,10 +75,6 @@ export default function App() {
       .catch((err) => console.error("Failed to create session:", err));
     return () => stopStreamRef.current?.();
   }, []);
-
-  useEffect(() => {
-    if (activeTab === "overview") setWhatIfResult(null);
-  }, [activeTab]);
 
   // ── Seed graph ────────────────────────────────────────────────────────────
   const handleSubmit = async (prompt) => {
@@ -149,6 +167,13 @@ export default function App() {
 
   const handleResetWhatIf = () => { setWhatIfResult(null); setWhatIfTarget(null); };
 
+  const handleTabChange = (tabKey) => {
+    setActiveTab(tabKey);
+    if (tabKey === "overview") {
+      setWhatIfResult(null);
+    }
+  };
+
   // ── Navigation ────────────────────────────────────────────────────────────
   const handleNewSearch = () => {
     stopStreamRef.current?.();
@@ -204,7 +229,12 @@ export default function App() {
   const seedId = graphData?.nodes[0]?.id;
 
   const perturbationOverlay = whatIfResult
-    ? { type: whatIfResult.type, targetNodeId: whatIfResult.nodeId, affectedNodes: whatIfResult.affected_nodes, affectedEdgeIds: whatIfResult.affected_edge_ids }
+    ? {
+        type: whatIfResult.type,
+        targetNodeId: whatIfResult.nodeId,
+        affectedNodes: whatIfResult.affected_nodes,
+        affectedEdgeIds: resolveOverlayEdgeIds(graphData.edges, whatIfResult.affected_edge_ids),
+      }
     : null;
 
   return (
@@ -218,7 +248,7 @@ export default function App() {
             <button
               key={tab.key}
               className={`tab-btn${activeTab === tab.key ? " tab-btn--active" : ""}`}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => handleTabChange(tab.key)}
             >
               {tab.icon}
               {tab.label}

@@ -27,16 +27,21 @@ from app.models.domain import (
 from app.repositories.graph_repo import new_graph_id
 
 
+def _normalize_symbol(symbol: str) -> str:
+    return " ".join(str(symbol or "").strip().upper().split())
+
+
 def _gene_node_id(symbol: str) -> str:
-    return f"gene_{symbol.upper()}"
+    return f"gene_{_normalize_symbol(symbol)}"
 
 
 def _edge_id(source: str, target: str, relation: EdgeType) -> str:
-    a, b = sorted([source.upper(), target.upper()])
+    a, b = sorted([_normalize_symbol(source), _normalize_symbol(target)])
     return f"edge_{a}_{b}_{relation.value}"
 
 
 def _make_node(symbol: str, facts: GeneFacts | None = None) -> GeneNode:
+    symbol = _normalize_symbol(symbol)
     meta: dict = {}
     if facts:
         meta = {
@@ -49,7 +54,7 @@ def _make_node(symbol: str, facts: GeneFacts | None = None) -> GeneNode:
     return GeneNode(
         id=_gene_node_id(symbol),
         type=NodeType.gene,
-        label=symbol.upper(),
+        label=symbol,
         meta=meta,
     )
 
@@ -58,11 +63,15 @@ def _make_edge(
     source: str,
     target: str,
     relation: GeneRelation,
+    source_node_id: str | None = None,
+    target_node_id: str | None = None,
 ) -> GeneEdge:
+    source = _normalize_symbol(source)
+    target = _normalize_symbol(target)
     return GeneEdge(
         id=_edge_id(source, target, relation.relation),
-        source=_gene_node_id(source),
-        target=_gene_node_id(target),
+        source=source_node_id or _gene_node_id(source),
+        target=target_node_id or _gene_node_id(target),
         relation=relation.relation,
         direction="directed",
         confidence=relation.confidence,
@@ -73,6 +82,13 @@ def _make_edge(
 
 
 class GraphService:
+    def _symbol_to_node_id(self, snapshot: GraphSnapshot) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        for node in snapshot.nodes:
+            symbol = _normalize_symbol(node.label or node.id.replace("gene_", ""))
+            mapping[symbol] = node.id
+        return mapping
+
     def build_seed_graph(
         self,
         session_id: str,
@@ -80,19 +96,25 @@ class GraphService:
         neighbor_facts: dict[str, GeneFacts] | None = None,
     ) -> GraphSnapshot:
         """Build an initial graph from seed gene facts + its neighbors."""
-        seed_symbol = facts.gene.upper()
+        seed_symbol = _normalize_symbol(facts.gene)
         seed_node = _make_node(seed_symbol, facts)
 
         nodes: dict[str, GeneNode] = {seed_node.id: seed_node}
         edges: dict[str, GeneEdge] = {}
 
         for relation in facts.neighbors:
-            neighbor_symbol = relation.gene.upper()
+            neighbor_symbol = _normalize_symbol(relation.gene)
             neighbor_fact = (neighbor_facts or {}).get(neighbor_symbol)
             neighbor_node = _make_node(neighbor_symbol, neighbor_fact)
             nodes[neighbor_node.id] = neighbor_node
 
-            edge = _make_edge(seed_symbol, neighbor_symbol, relation)
+            edge = _make_edge(
+                seed_symbol,
+                neighbor_symbol,
+                relation,
+                source_node_id=seed_node.id,
+                target_node_id=neighbor_node.id,
+            )
             edges[edge.id] = edge
 
         return GraphSnapshot(
@@ -117,30 +139,50 @@ class GraphService:
         """
         existing_node_ids = {n.id for n in current.nodes}
         existing_edge_ids = {e.id for e in current.edges}
+        symbol_to_node_id = self._symbol_to_node_id(current)
 
         new_nodes: list[GeneNode] = []
         new_edges: list[GeneEdge] = []
 
         # Ensure the focus gene node has updated meta
         focus_node = _make_node(new_facts.gene, new_facts)
+        focus_symbol = _normalize_symbol(new_facts.gene)
+        focus_node_id = symbol_to_node_id.get(focus_symbol, focus_node.id)
+        if focus_node_id != focus_node.id:
+            focus_node.id = focus_node_id
+
         if focus_node.id not in existing_node_ids:
             new_nodes.append(focus_node)
+            existing_node_ids.add(focus_node.id)
+            symbol_to_node_id[focus_symbol] = focus_node.id
         else:
             # Update existing node meta
             for n in current.nodes:
                 if n.id == focus_node.id:
+                    n.label = focus_symbol
                     n.meta = focus_node.meta
                     break
 
         for relation in new_facts.neighbors:
-            neighbor_symbol = relation.gene.upper()
+            neighbor_symbol = _normalize_symbol(relation.gene)
             neighbor_fact = (neighbor_facts or {}).get(neighbor_symbol)
             neighbor_node = _make_node(neighbor_symbol, neighbor_fact)
+            neighbor_node_id = symbol_to_node_id.get(neighbor_symbol, neighbor_node.id)
+            if neighbor_node_id != neighbor_node.id:
+                neighbor_node.id = neighbor_node_id
+
             if neighbor_node.id not in existing_node_ids:
                 new_nodes.append(neighbor_node)
                 existing_node_ids.add(neighbor_node.id)
+                symbol_to_node_id[neighbor_symbol] = neighbor_node.id
 
-            edge = _make_edge(new_facts.gene, neighbor_symbol, relation)
+            edge = _make_edge(
+                focus_symbol,
+                neighbor_symbol,
+                relation,
+                source_node_id=focus_node.id,
+                target_node_id=neighbor_node.id,
+            )
             if edge.id not in existing_edge_ids:
                 new_edges.append(edge)
                 existing_edge_ids.add(edge.id)

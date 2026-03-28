@@ -61,6 +61,19 @@ class MemoryService:
         text = f"Gene: {gene}\nSummary: {summary}"
         await self._hydra.store_text(session_id=session_id, text=text)
 
+    async def store_exchange(
+        self,
+        session_id: str,
+        user_text: str,
+        assistant_text: str,
+    ) -> None:
+        """Persist an actual user question and the returned answer."""
+        await self._hydra.store_interaction(
+            session_id=session_id,
+            user_text=user_text,
+            assistant_text=assistant_text,
+        )
+
     # ── Recall ─────────────────────────────────────────────────────────────────
 
     async def get_context(
