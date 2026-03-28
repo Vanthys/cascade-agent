@@ -75,10 +75,28 @@ class MyGeneProvider:
             )
             r.raise_for_status()
             hits = r.json().get("hits", [])
+
+            # Fallback: search by alias (handles informal names like BCL-2 → BCL2)
+            if not hits:
+                r2 = await self._http.get(
+                    f"{MYGENE_BASE}/query",
+                    params={
+                        "q": f"alias:{symbol}",
+                        "species": species,
+                        "fields": "entrezgene,symbol,name,summary,pathway.kegg,alias",
+                        "size": 1,
+                    },
+                    timeout=10.0,
+                )
+                r2.raise_for_status()
+                hits = r2.json().get("hits", [])
+
             if not hits:
                 return GeneFacts(gene=symbol)
 
             hit = hits[0]
+            # Use the canonical symbol from MyGene (e.g. "BCL2" instead of "BCL-2")
+            symbol = hit.get("symbol", symbol).upper()
             ncbi_id = str(hit.get("entrezgene", ""))
 
             # Step 2: fuller details by entrez ID
@@ -397,12 +415,13 @@ class ResearchAggregator:
             log.warning(f"Could not save research cache: {exc}")
 
     async def get_gene_facts(self, symbol: str, species: str = "human") -> GeneFacts:
-        # Run in parallel — mygene for facts, string for neighbors
-        # We reuse the cached basics instead of creating redundant calls
-        facts, neighbors = await asyncio.gather(
-            self.get_basic_facts(symbol, species),
-            self.get_neighbors(symbol, species),
-        )
+        # Resolve basic facts first so we get the canonical gene symbol.
+        # MyGene will normalise aliases (e.g. BCL-2 → BCL2) and return the
+        # HGNC-approved symbol. We then use that canonical symbol for all
+        # downstream lookups (STRING / OmniPath) to avoid mismatches.
+        facts = await self.get_basic_facts(symbol, species)
+        canonical = facts.gene if facts.gene else symbol.upper()
+        neighbors = await self.get_neighbors(canonical, species)
         facts.neighbors = neighbors
         return facts
 

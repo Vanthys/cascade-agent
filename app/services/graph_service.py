@@ -46,7 +46,7 @@ def _make_node(symbol: str, facts: GeneFacts | None = None) -> GeneNode:
     if facts:
         meta = {
             "aliases": facts.aliases,
-            "summary": facts.summary[:300] if facts.summary else "",
+            "summary": facts.summary or "",
             "organism": "human",
             "pathways": facts.pathways[:5],
             "ncbi_id": facts.ncbi_id,
