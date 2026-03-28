@@ -33,6 +33,7 @@ log = get_logger("research_client")
 
 MYGENE_BASE = "https://mygene.info/v3"
 STRING_BASE = "https://string-db.org/api/json"
+OMNIPATH_BASE = "https://omnipathdb.org"
 # STRING uses NCBI taxonomy IDs; 9606 = human
 SPECIES_TO_TAXID: dict[str, str] = {
     "human": "9606",
@@ -148,9 +149,29 @@ def _score_to_confidence(score: int) -> float:
     return 0.2
 
 
-def _score_to_edge_type(score: int) -> EdgeType:
+def _score_to_edge_type(
+    score: int,
+    escore: float = 0.0,
+    dscore: float = 0.0,
+    ascore: float = 0.0,
+) -> EdgeType:
+    """
+    Map STRING channel scores to an EdgeType.
+    STRING does not provide activation/inhibition direction, so we infer
+    the most likely interaction category from the evidence channel scores.
+      escore = experimental (physical binding assay)
+      dscore = curated database / known pathway membership
+      ascore = co-expression
+    Combined score is used as a tiebreaker for low-channel interactions.
+    """
+    if escore >= 0.35:
+        return EdgeType.binds            # experimental evidence → physical interaction
+    if dscore >= 0.5:
+        return EdgeType.in_pathway_with  # curated pathway database record
+    if ascore >= 0.35:
+        return EdgeType.coexpressed_with # co-expression evidence
     if score >= 700:
-        return EdgeType.activates
+        return EdgeType.associated_with  # high confidence, channel unclear
     if score >= 400:
         return EdgeType.associated_with
     return EdgeType.unknown_related
@@ -182,23 +203,43 @@ class StringDbProvider:
             r.raise_for_status()
             interactions = r.json()
 
-            neighbors: list[GeneRelation] = []
-            seen: set[str] = set()
+            me = symbol.upper()
+
+            # Group rows by partner, keeping only rows where `me` is one endpoint.
+            # STRING returns the full neighbor-subnetwork (including edges between
+            # neighbors), so we must filter to direct interactions only.
+            best: dict[str, dict] = {}
             for item in interactions:
                 partner_a = item.get("preferredName_A", "").upper()
                 partner_b = item.get("preferredName_B", "").upper()
-                me = symbol.upper()
-                partner = partner_b if partner_a == me else partner_a
-                if partner == me or partner in seen:
+                if partner_a == me:
+                    partner = partner_b
+                elif partner_b == me:
+                    partner = partner_a
+                else:
+                    continue  # edge between two neighbors — skip
+                if not partner or partner == me:
                     continue
-                seen.add(partner)
+                # Keep the row with the highest combined score per partner
+                existing = best.get(partner)
+                if existing is None or item.get("score", 0) > existing.get("score", 0):
+                    best[partner] = item
+
+            neighbors: list[GeneRelation] = []
+            for partner, item in best.items():
                 score = int(item.get("score", 0) * 1000)  # STRING gives 0–1
+                escore = float(item.get("escore", 0))
+                dscore = float(item.get("dscore", 0))
+                ascore = float(item.get("ascore", 0))
                 neighbors.append(
                     GeneRelation(
                         gene=partner,
-                        relation=_score_to_edge_type(score),
+                        relation=_score_to_edge_type(score, escore, dscore, ascore),
                         confidence=_score_to_confidence(score),
-                        evidence=[f"STRING combined score: {score}"],
+                        evidence=[
+                            f"STRING combined score: {score}",
+                            f"experimental={escore:.2f}, database={dscore:.2f}, coexpression={ascore:.2f}",
+                        ],
                         provenance=["string-db.org"],
                     )
                 )
@@ -244,6 +285,71 @@ class StringDbProvider:
             raise ResearchError(f"STRING DB edge evidence failed: {exc}", recoverable=True) from exc
 
 
+# ── OmniPath provider ────────────────────────────────────────────────────────
+
+
+class OmniPathProvider:
+    """
+    Fetches directed, signed protein interactions from OmniPath.
+    Returns a dict keyed by partner gene symbol → EdgeType.
+    OmniPath provides consensus_stimulation / consensus_inhibition flags,
+    giving us true activates/inhibits classifications that STRING cannot.
+    """
+
+    def __init__(self, client: httpx.AsyncClient):
+        self._http = client
+
+    def _classify(self, row: dict) -> EdgeType | None:
+        """Map OmniPath consensus flags to an EdgeType. Returns None if ambiguous."""
+        stim = row.get("consensus_stimulation", False)
+        inhib = row.get("consensus_inhibition", False)
+        if stim and not inhib:
+            return EdgeType.activates
+        if inhib and not stim:
+            return EdgeType.inhibits
+        return None  # conflicting evidence — don't override STRING
+
+    async def get_signed_edges(self, symbol: str) -> dict[str, EdgeType]:
+        """
+        Return {partner_symbol: EdgeType} for all OmniPath interactions
+        where `symbol` is source or target and the edge has unambiguous sign.
+        """
+        me = symbol.upper()
+        try:
+            r = await self._http.get(
+                f"{OMNIPATH_BASE}/interactions",
+                params={
+                    "genesymbols": "yes",
+                    "sources": symbol,
+                    "targets": symbol,
+                    "format": "json",
+                },
+                timeout=15.0,
+            )
+            r.raise_for_status()
+            rows = r.json()
+        except httpx.HTTPError as exc:
+            log.warning(f"OmniPath request failed for {symbol}: {exc}")
+            return {}
+
+        result: dict[str, EdgeType] = {}
+        for row in rows:
+            src = row.get("source_genesymbol", "").upper()
+            tgt = row.get("target_genesymbol", "").upper()
+            partner = tgt if src == me else src if tgt == me else None
+            if not partner or partner == me:
+                continue
+            edge_type = self._classify(row)
+            if edge_type is not None:
+                # Prefer activates/inhibits already set; skip if conflicting
+                existing = result.get(partner)
+                if existing is None:
+                    result[partner] = edge_type
+                elif existing != edge_type:
+                    result[partner] = EdgeType.associated_with  # conflicting — demote
+        return result
+
+
 # ── Aggregator ────────────────────────────────────────────────────────────────
 
 
@@ -256,6 +362,7 @@ class ResearchAggregator:
     def __init__(self, http_client: httpx.AsyncClient):
         self._mygene = MyGeneProvider(http_client)
         self._string = StringDbProvider(http_client)
+        self._omnipath = OmniPathProvider(http_client)
         self._cache = TTLCache(maxsize=1000, ttl=86400 * 7)  # 7 days cache
         self._cache_path = Path(".research_cache.json")
         self._load_cache()
@@ -315,7 +422,23 @@ class ResearchAggregator:
         if key in self._cache:
             return copy.deepcopy(self._cache[key])
 
-        neighbors = await self._string.get_neighbors(symbol, species)
+        # Fetch STRING interactions and OmniPath signed edges in parallel
+        string_neighbors, omnipath_edges = await asyncio.gather(
+            self._string.get_neighbors(symbol, species),
+            self._omnipath.get_signed_edges(symbol),
+        )
+
+        # Overlay OmniPath's signed edge types onto STRING's neighbors.
+        # OmniPath takes priority for activates/inhibits; STRING provides
+        # binds/coexpressed_with/in_pathway_with/associated_with for the rest.
+        neighbors: list[GeneRelation] = []
+        for rel in string_neighbors:
+            partner = rel.gene.upper()
+            omni_type = omnipath_edges.get(partner)
+            if omni_type is not None:
+                rel = rel.model_copy(update={"relation": omni_type})
+            neighbors.append(rel)
+
         self._cache[key] = copy.deepcopy(neighbors)
         self._save_cache()
         return neighbors
