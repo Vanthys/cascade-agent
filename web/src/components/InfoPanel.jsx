@@ -262,6 +262,41 @@ function HypothesisResult({ payload }) {
   );
 }
 
+function ThinkingIndicator() {
+  return (
+    <div style={{ marginBottom: 10, display: "flex" }}>
+      <div
+        style={{
+          padding: "10px 14px",
+          borderRadius: "12px 12px 12px 4px",
+          background: "#f5f5f5",
+          display: "flex",
+          gap: 5,
+          alignItems: "center",
+        }}
+      >
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "#bfbfbf",
+              display: "inline-block",
+              animationName: "thinking",
+              animationDuration: "1.2s",
+              animationTimingFunction: "ease-in-out",
+              animationDelay: `${i * 0.18}s`,
+              animationIterationCount: "infinite",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ConversationBubble({ message, loading }) {
   const isAssistant = message.role === "assistant";
 
@@ -640,6 +675,9 @@ export default function InfoPanel({
                 }
               />
             ))}
+            {followUpLoading && conversation.length > 0 && conversation[conversation.length - 1].role === "user" && (
+              <ThinkingIndicator />
+            )}
           </>
         )}
       </div>

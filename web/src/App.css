@@ -136,6 +136,16 @@
   flex-direction: column;
 }
 
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes thinking {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
 /* React Flow overrides */
 .react-flow__controls {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;

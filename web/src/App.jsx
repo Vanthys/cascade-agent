@@ -6,7 +6,7 @@ import GraphCanvas from "./components/GraphCanvas";
 import InfoPanel from "./components/InfoPanel";
 import WhatIfPanel from "./components/WhatIfPanel";
 import { createSession, seedGraph, connectStream } from "./api/client";
-import { getMockWhatIfResult } from "./data/mockData";
+import { getMockWhatIfResult, computeCascade } from "./data/mockData";
 import "./App.css";
 
 const { Header, Content, Sider } = Layout;
@@ -160,7 +160,16 @@ export default function App() {
     setWhatIfResult(null);
     setTimeout(() => {
       const raw = getMockWhatIfResult(targetNode.id, targetNode.label, perturbationType);
-      setWhatIfResult({ ...raw, nodeId: targetNode.id, nodeLabel: targetNode.label, type: perturbationType });
+      // Compute cascade from actual graph structure so ALL reachable nodes are marked
+      const { affectedNodes, affectedEdgeIds } = computeCascade(graphData, targetNode.id, perturbationType);
+      setWhatIfResult({
+        ...raw,
+        nodeId:           targetNode.id,
+        nodeLabel:        targetNode.label,
+        type:             perturbationType,
+        affected_nodes:   affectedNodes,
+        affected_edge_ids: affectedEdgeIds,
+      });
       setWhatIfLoading(false);
     }, 1200);
   };

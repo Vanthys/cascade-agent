@@ -305,7 +305,7 @@ export default function GraphCanvas({
         .attr("fill-opacity", 0.85);
       svg.selectAll(".nodes .effect-badge")
         .filter((d) => d.id === id)
-        .text(effect === "increase" ? "+INCREASE" : "-DECREASE")
+        .text(effect === "increase" ? "↑" : "↓")
         .attr("fill", col)
         .style("opacity", 1);
     });

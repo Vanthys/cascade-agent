@@ -129,6 +129,61 @@ export function getMockWhatIfResult(nodeId, nodeLabel, type) {
   return DETAILED_RESULTS[key] ?? buildGenericResult(nodeLabel, type);
 }
 
+// ─── Graph cascade computation ────────────────────────────────────────────────
+// BFS through outgoing edges from the target node, propagating the perturbation
+// effect through the network using edge relation semantics.
+const PROPAGATE = {
+  activates:              (e) => e,                                           // same direction
+  inhibits:               (e) => (e === "increase" ? "decrease" : "increase"), // flip
+  binds:                  (e) => e,
+  coexpressed_with:       (e) => e,
+  in_pathway_with:        (e) => e,
+  associated_with:        (e) => e,
+  synthetic_lethal_with:  (e) => e,
+  unknown_related:        null, // don't propagate through unknown
+};
+
+export function computeCascade(graphData, targetNodeId, perturbationType) {
+  const initialEffect =
+    perturbationType === "inhibit" || perturbationType === "downregulate"
+      ? "decrease"
+      : "increase";
+
+  const nodeEffects = new Map([[targetNodeId, initialEffect]]);
+  const affectedEdgeIds = [];
+  const queue = [targetNodeId];
+  const visited = new Set([targetNodeId]);
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    const currentEffect = nodeEffects.get(currentId);
+
+    for (const edge of graphData.edges) {
+      // Normalise: D3 may have mutated source/target to objects
+      const srcId = typeof edge.source === "object" ? edge.source.id : edge.source;
+      const tgtId = typeof edge.target === "object" ? edge.target.id : edge.target;
+
+      if (srcId !== currentId || visited.has(tgtId)) continue;
+
+      const propagator = PROPAGATE[edge.relation];
+      if (!propagator) continue;
+
+      const downstreamEffect = propagator(currentEffect);
+      nodeEffects.set(tgtId, downstreamEffect);
+      affectedEdgeIds.push(edge.id);
+      visited.add(tgtId);
+      queue.push(tgtId);
+    }
+  }
+
+  const affectedNodes = [];
+  for (const [id, effect] of nodeEffects) {
+    if (id !== targetNodeId) affectedNodes.push({ id, effect });
+  }
+
+  return { affectedNodes, affectedEdgeIds };
+}
+
 // ─── Streaming helper ─────────────────────────────────────────────────────────
 /**
  * simulateSSEStream — typewriter animation helper.
