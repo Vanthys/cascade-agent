@@ -19,6 +19,7 @@ from typing import Protocol
 import httpx
 from cachetools import TTLCache
 
+from app.core.config import settings
 from app.core.exceptions import ResearchError
 from app.core.logging import get_logger
 from app.models.domain import (
@@ -382,7 +383,7 @@ class ResearchAggregator:
         self._string = StringDbProvider(http_client)
         self._omnipath = OmniPathProvider(http_client)
         self._cache = TTLCache(maxsize=1000, ttl=86400 * 7)  # 7 days cache
-        self._cache_path = Path(".research_cache.json")
+        self._cache_path = Path(settings.research_cache_path)
         self._load_cache()
 
     def _load_cache(self):
