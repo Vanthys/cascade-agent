@@ -1,13 +1,9 @@
 import { Alert, Button } from "antd";
-import { ExperimentOutlined } from "@ant-design/icons";
 import PromptInput from "./PromptInput";
+import CascadeLogo from "./CascadeLogo";
 
 function Text({ children, style }) {
   return <span style={style}>{children}</span>;
-}
-
-function Title({ children, style }) {
-  return <h1 style={{ margin: 0, ...style }}>{children}</h1>;
 }
 
 function Paragraph({ children, style }) {
@@ -29,26 +25,7 @@ export default function ChatView({ onSubmit, loading, error }) {
         background: "#fafafa",
       }}
     >
-      {/* Logo / icon */}
-      <div
-        style={{
-          width: 64,
-          height: 64,
-          borderRadius: 16,
-          background: "linear-gradient(135deg, #1677ff 0%, #0958d9 100%)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 24,
-          boxShadow: "0 8px 24px rgba(22,119,255,0.25)",
-        }}
-      >
-        <ExperimentOutlined style={{ fontSize: 30, color: "#fff" }} />
-      </div>
-
-      <Title style={{ fontSize: 32, marginBottom: 8, textAlign: "center", fontWeight: 700 }}>
-        Gene Interaction Explorer
-      </Title>
+      <CascadeLogo size="full" style={{ marginBottom: 32 }} />
 
       <Paragraph
         style={{

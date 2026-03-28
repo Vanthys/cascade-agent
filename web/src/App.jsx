@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { Layout, Button, Spin, Progress, Tag } from "antd";
-import { ExperimentOutlined, ReloadOutlined, ApartmentOutlined, BulbOutlined } from "@ant-design/icons";
+import { ReloadOutlined, ApartmentOutlined, BulbOutlined } from "@ant-design/icons";
 import ChatView from "./components/ChatView";
 import GraphCanvas from "./components/GraphCanvas";
 import InfoPanel from "./components/InfoPanel";
 import WhatIfPanel from "./components/WhatIfPanel";
-import { createSession, seedGraph, connectStream } from "./api/client";
-import { getMockWhatIfResult, computeCascade } from "./data/mockData";
+import CascadeLogo from "./components/CascadeLogo";
+import { createSession, seedGraph, connectStream, runWhatIf } from "./api/client";
+import { computeCascade } from "./data/mockData";
 import "./App.css";
 
 const { Header, Content, Sider } = Layout;
@@ -155,23 +156,70 @@ export default function App() {
     setExpandedNodes((prev) => new Set(prev).add(nodeId));
 
   // ── What-if ───────────────────────────────────────────────────────────────
-  const handleRunWhatIf = (targetNode, perturbationType) => {
+  // Map frontend perturbation labels → backend PerturbationType enum values
+  const PERTURB_TO_BACKEND = {
+    inhibit:     "disruption",
+    activate:    "upregulation",
+    downregulate:"downregulation",
+    upregulate:  "upregulation",
+  };
+
+  const handleRunWhatIf = async (targetNode, perturbationType) => {
+    if (!sessionId) return;
     setWhatIfLoading(true);
     setWhatIfResult(null);
-    setTimeout(() => {
-      const raw = getMockWhatIfResult(targetNode.id, targetNode.label, perturbationType);
-      // Compute cascade from actual graph structure so ALL reachable nodes are marked
-      const { affectedNodes, affectedEdgeIds } = computeCascade(graphData, targetNode.id, perturbationType);
-      setWhatIfResult({
-        ...raw,
-        nodeId:           targetNode.id,
-        nodeLabel:        targetNode.label,
-        type:             perturbationType,
-        affected_nodes:   affectedNodes,
-        affected_edge_ids: affectedEdgeIds,
+    stopStreamRef.current?.();
+
+    const backendType = PERTURB_TO_BACKEND[perturbationType] ?? "disruption";
+
+    try {
+      const { request_id } = await runWhatIf(
+        sessionId,
+        targetNode.id,
+        "node",
+        backendType,
+        null,
+      );
+
+      const stop = connectStream(request_id, {
+        hypothesis(payload) {
+          // Compute visual cascade from real graph topology
+          const { affectedNodes, affectedEdgeIds } = computeCascade(
+            graphData,
+            targetNode.id,
+            perturbationType,
+          );
+          setWhatIfResult({
+            confidence:            payload.confidence,
+            known_context:         payload.known_context ?? [],
+            hypotheses:            payload.hypotheses ?? [],
+            downstream_candidates: payload.downstream_candidates ?? [],
+            existing_therapeutics: [],   // not provided by backend
+            uncertainty_notes:     payload.uncertainty_notes ?? [],
+            nodeId:                targetNode.id,
+            nodeLabel:             targetNode.label,
+            type:                  perturbationType,
+            affected_nodes:        affectedNodes,
+            affected_edge_ids:     affectedEdgeIds,
+          });
+          setWhatIfLoading(false);
+        },
+        error({ message }) {
+          console.error("What-if error:", message);
+          setWhatIfLoading(false);
+        },
+        completed() {
+          setWhatIfLoading(false);
+        },
+        onClose() {
+          setWhatIfLoading(false);
+        },
       });
+      stopStreamRef.current = stop;
+    } catch (err) {
+      console.error("What-if request failed:", err);
       setWhatIfLoading(false);
-    }, 1200);
+    }
   };
 
   const handleResetWhatIf = () => { setWhatIfResult(null); setWhatIfTarget(null); };
@@ -215,7 +263,7 @@ export default function App() {
   if (phase === "loading") {
     return (
       <div className="loading-screen">
-        <ExperimentOutlined style={{ fontSize: 40, color: "#1677ff" }} />
+        <CascadeLogo size="icon" />
         <div style={{ textAlign: "center" }}>
           <Text strong style={{ fontSize: 16, display: "block", marginBottom: 4 }}>
             Researching{" "}
@@ -249,8 +297,7 @@ export default function App() {
   return (
     <Layout className="graph-layout">
       <Header className="app-header">
-        <ExperimentOutlined style={{ color: "#1677ff", fontSize: 16 }} />
-        <Text strong style={{ fontSize: 14 }}>Gene Interaction Explorer</Text>
+        <CascadeLogo size="header" />
 
         <div className="tab-bar">
           {TABS.map((tab) => (
