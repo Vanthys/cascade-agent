@@ -11,7 +11,7 @@ function Paragraph({ children, style }) {
 }
 
 export default function ChatView({ onSubmit, loading, error }) {
-  const suggestions = ["TP53", "BRCA1", "EGFR", "MYC"];
+  const suggestions = ["BCL-2", "TP53", "BRCA1", "EGFR", "MYC"];
 
   return (
     <div
@@ -25,6 +25,28 @@ export default function ChatView({ onSubmit, loading, error }) {
         background: "#fafafa",
       }}
     >
+      <div
+        style={{
+          position: "fixed",
+          top: 16,
+          right: 16,
+          maxWidth: 320,
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: "rgba(255,255,255,0.92)",
+          border: "1px solid #ffd591",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <Text style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#d46b08", marginBottom: 4 }}>
+          Hackathon build
+        </Text>
+        <Text style={{ fontSize: 12, color: "#874d00", lineHeight: 1.5 }}>
+          Crafted within a few hours for the Total Agent Recall hackathon. Expect rough edges.
+        </Text>
+      </div>
+
       <CascadeLogo size="full" style={{ marginBottom: 32 }} />
 
       <Paragraph
@@ -72,7 +94,7 @@ export default function ChatView({ onSubmit, loading, error }) {
         <PromptInput
           onSubmit={onSubmit}
           loading={loading}
-          placeholder={loading ? "Connecting to backend…" : "Try: TP53, BRCA1, EGFR, MYC…"}
+          placeholder={loading ? "Connecting to backend…" : "Try: BCL-2, TP53, BRCA1, EGFR…"}
           autoFocus
         />
         <div
@@ -89,9 +111,20 @@ export default function ChatView({ onSubmit, loading, error }) {
               size="small"
               disabled={loading}
               onClick={() => onSubmit(suggestion)}
-              style={{ borderRadius: 999, fontWeight: 600 }}
+              style={
+                suggestion === "BCL-2"
+                  ? {
+                      borderRadius: 999,
+                      fontWeight: 700,
+                      color: "#7a0619",
+                      borderColor: "#ff85a1",
+                      background: "linear-gradient(135deg, #fff1f5 0%, #ffe7ba 100%)",
+                      boxShadow: "0 6px 18px rgba(199, 54, 89, 0.18)",
+                    }
+                  : { borderRadius: 999, fontWeight: 600 }
+              }
             >
-              {suggestion}
+              {suggestion === "BCL-2" ? "BCL-2" : suggestion}
             </Button>
           ))}
         </div>
