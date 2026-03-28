@@ -85,6 +85,53 @@ function parseAddCommand(input) {
   return match[1]?.trim() ?? "";
 }
 
+function isHelpCommand(input) {
+  return /^\/help$/i.test(input.trim());
+}
+
+function buildHelpMarkdown(selection) {
+  const currentTarget = selection?._type === "node"
+    ? selection.label
+    : selection?._type === "edge"
+      ? "the selected interaction"
+      : "the selected graph item";
+
+  return [
+    "## Available Commands",
+    "",
+    "`/help`",
+    "Show this command reference.",
+    "",
+    "`/add GENE`",
+    "Add a gene to the current graph, fetch its neighbors, and focus the panel on it.",
+    "Example: `/add EGFR`",
+    "",
+    "`/lit QUERY`",
+    "Search fresh literature using Europe PMC, with optional recent bioRxiv preprints mixed in.",
+    "Example: `/lit KRAS resistance colorectal cancer`",
+    "",
+    "`/lit`",
+    `Use the current selection as the literature query. Right now that means ${currentTarget}.`,
+    "",
+    "`/expand QUESTION`",
+    "Expand the currently selected gene and ask a focused follow-up question while adding more graph context.",
+    `Example: \`/expand What pathways is ${selection?._type === "node" ? selection.label : "TP53"} most associated with?\``,
+    "",
+    "`/whatif ...`",
+    "Run a perturbation-style what-if analysis for the selected gene.",
+    "Examples: `/whatif downregulate`, `/whatif knockout`, `/whatif overexpression`",
+    "",
+    "`plain text`",
+    "If you just type a normal question on a selected gene, the panel treats it like an expand/follow-up request.",
+    "",
+    "## Notes",
+    "",
+    "- `/add` expects a gene symbol like `TP53` or `EGFR`.",
+    "- `/lit` returns source-backed papers with citations and links.",
+    "- `/whatif` is hypothesis-oriented and should be treated as exploratory, not clinical guidance.",
+  ].join("\n");
+}
+
 function buildLiteratureMarkdown(result, query) {
   const papers = result?.papers ?? [];
   if (!papers.length) {
@@ -520,10 +567,24 @@ export default function InfoPanel({
 
     const isNode = selection._type === "node";
     const text = prompt.trim();
+    const helpCommand = isHelpCommand(text);
     const literatureQuery = parseLiteratureCommand(text);
     const addGeneQuery = parseAddCommand(text);
 
     try {
+      if (helpCommand) {
+        setConversation((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            kind: "markdown",
+            text: buildHelpMarkdown(selection),
+          },
+        ]);
+        setFollowUpLoading(false);
+        return;
+      }
+
       if (addGeneQuery !== null) {
         const gene = addGeneQuery.split(/\s+/)[0]?.toUpperCase();
         if (!gene) {
@@ -848,8 +909,8 @@ export default function InfoPanel({
           loading={followUpLoading}
           placeholder={
             isNode
-              ? `Ask about ${selection.label}, use /add GENE, /whatif, or /lit.`
-              : "Ask about this interaction, or use /add GENE or /lit."
+              ? `Ask about ${selection.label}, or use /help, /add, /whatif, /lit.`
+              : "Ask about this interaction, or use /help, /add, or /lit."
           }
         />
       </div>

@@ -12,4 +12,6 @@ wheels/
 
 /data
 
+pytest-cache-files-*
+
 .research_cache.json
