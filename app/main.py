@@ -13,11 +13,13 @@ Wires together:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import graph, literature, sessions, stream, whatif
 from app.clients.gmi_client import GMIClient
@@ -87,6 +89,18 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def commit_modal_volume(request: Request, call_next):
+        response = await call_next(request)
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            volume = getattr(request.app.state, "data_volume", None)
+            if volume is not None:
+                try:
+                    volume.commit()
+                except Exception:
+                    pass
+        return response
+
     # ── Global error handler ──────────────────────────────────────────────────
     @app.exception_handler(GeneAgentError)
     async def gene_agent_error_handler(request: Request, exc: GeneAgentError):
@@ -96,15 +110,43 @@ def create_app() -> FastAPI:
         )
 
     # ── Routers ───────────────────────────────────────────────────────────────
-    app.include_router(sessions.router)
-    app.include_router(graph.router)
-    app.include_router(literature.router)
-    app.include_router(whatif.router)
-    app.include_router(stream.router)
+    api_routers = [
+        sessions.router,
+        graph.router,
+        literature.router,
+        whatif.router,
+        stream.router,
+    ]
+    for router in api_routers:
+        app.include_router(router)
+        app.include_router(router, prefix="/api")
 
     @app.get("/health")
     def health():
         return {"status": "ok", "version": "0.1.0"}
+
+    @app.get("/api/health")
+    def api_health():
+        return {"status": "ok", "version": "0.1.0"}
+
+    frontend_dist = Path(settings.frontend_dist_dir)
+    frontend_root = frontend_dist.resolve()
+    index_file = frontend_root / "index.html"
+    assets_dir = frontend_root / "assets"
+
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
+
+    if frontend_root.exists() and index_file.exists():
+        @app.get("/{full_path:path}", include_in_schema=False)
+        def serve_frontend(full_path: str):
+            if not full_path or full_path.startswith(("api/", "docs", "redoc", "openapi.json", "health")):
+                return FileResponse(index_file)
+
+            requested = (frontend_root / full_path).resolve()
+            if frontend_root in requested.parents and requested.exists() and requested.is_file():
+                return FileResponse(requested)
+            return FileResponse(index_file)
 
     return app
 

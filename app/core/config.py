@@ -21,6 +21,11 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "sqlite:///./gene_agent.db"
+    data_dir: str = "./data"
+    research_cache_path: str = "./.research_cache.json"
+
+    # Frontend
+    frontend_dist_dir: str = "./web/dist"
 
     # Cache
     cache_ttl_seconds: int = 3600
